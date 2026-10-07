@@ -146,6 +146,7 @@ if ($LASTEXITCODE -ne 0) { throw 'The local launcher build failed.' }
 & (Join-Path $PSScriptRoot 'Stage-Setup.ps1') -SetupPath $SetupPath -LauncherDirectory $output
 Copy-Item -LiteralPath (Join-Path $upstream 'LICENSE') -Destination (Join-Path $output 'UPSTREAM-LICENSE.txt')
 Copy-Item -LiteralPath (Join-Path $upstream 'vendor\README.md') -Destination (Join-Path $output 'MONO-CECIL-NOTICE.md')
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'licenses\Mono.Cecil-LICENSE.txt') -Destination (Join-Path $output 'Mono.Cecil-LICENSE.txt')
 $distScripts = Join-Path ([IO.Path]::GetDirectoryName($output)) 'scripts'
 [IO.Directory]::CreateDirectory($distScripts) | Out-Null
 foreach ($file in @('Install-Mod.ps1', 'Install-PayoutMod.ps1', 'Game-Paths.ps1', 'Start-Bridge.ps1', 'Start-Backend.ps1')) {
