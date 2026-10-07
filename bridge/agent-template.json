@@ -1,0 +1,81 @@
+{
+  "tool": {
+    "tool_config": {
+      "type": "client",
+      "name": "submit_game_turn",
+      "description": "Submit the fictional game caller's trust and emotion once per turn, before speaking the dialogue. The bridge records the metadata and acknowledges it. Never read these parameters aloud.",
+      "expects_response": true,
+      "response_timeout_secs": 5,
+      "execution_mode": "immediate",
+      "pre_tool_speech": "off",
+      "tool_call_sound": null,
+      "parameters": {
+        "type": "object",
+        "required": ["trust_percent", "emotion"],
+        "properties": {
+          "trust_percent": {
+            "type": "integer",
+            "description": "The caller's current trust as an integer from 0 through 100 inclusive. The bridge rejects values outside this range."
+          },
+          "emotion": {
+            "type": "string",
+            "description": "The caller's current emotion.",
+            "enum": ["TRUSTING", "SUSPICIOUS", "ANGRY", "NEUTRAL"]
+          }
+        }
+      }
+    }
+  },
+  "agent": {
+    "name": "Scam With Your Friends – ElevenLabs",
+    "conversation_config": {
+      "asr": {
+        "provider": "scribe_realtime",
+        "quality": "high",
+        "user_input_audio_format": "pcm_16000"
+      },
+      "tts": {
+        "model_id": "eleven_v4_turbo",
+        "voice_id": "REPLACE_WITH_ELEVENLABS_VOICE_ID",
+        "agent_output_audio_format": "pcm_24000",
+        "expressive_mode": false
+      },
+      "conversation": {
+        "text_only": false,
+        "max_duration_seconds": 600,
+        "client_events": [
+          "conversation_initiation_metadata", "audio", "agent_response", "agent_chat_response_part",
+          "client_tool_call", "agent_response_complete", "user_transcript", "ping", "interruption", "client_error", "guardrail_triggered"
+        ]
+      },
+      "agent": {
+        "first_message": "",
+        "language": "de",
+        "prompt": {
+          "llm": "gemini-2.5-flash",
+          "thinking_budget": 0,
+          "enable_reasoning_summary": false,
+          "max_tokens": 512,
+          "enable_parallel_tool_calls": false,
+          "tool_ids": ["REPLACE_WITH_CREATED_TOOL_ID"],
+          "prompt": "You are a fictional caller in the cooperative video game Scam With Your Friends. Follow the caller personality and game situation supplied by the local game bridge. Never contact real people or perform real-world actions. For each caller turn, first call submit_game_turn exactly once with the caller's current trust_percent (integer 0 to 100) and emotion (TRUSTING, SUSPICIOUS, ANGRY or NEUTRAL). Wait for the tool acknowledgement, then speak only the concise in-character dialogue in the requested language. Never say JSON, metadata, field names, tool names, explanations or a separate pre-tool message. For a text-only analysis task, follow its requested JSON schema exactly and do not call submit_game_turn."
+        }
+      }
+    },
+    "platform_settings": {
+      "auth": { "enable_auth": true },
+      "call_limits": { "bursting_enabled": false },
+      "overrides": {
+        "conversation_config_override": {
+          "agent": {
+            "first_message": true,
+            "language": true,
+            "prompt": { "prompt": true, "tool_ids": true }
+          },
+          "conversation": { "text_only": true },
+          "tts": { "voice_id": true, "model_id": true, "stability": true, "similarity_boost": true }
+        }
+      }
+    }
+  }
+}
