@@ -10,7 +10,7 @@ Lokale BepInEx-Mod mit angepasstem Launcher. Spracheingabe, Gesprächsantworten 
 
 ## Start
 
-1. `Start-ElevenLabs.cmd` im Ordner `dist` öffnen. Die lokale Einrichtung erscheint unter `http://127.0.0.1:8765`.
+1. `Start-ElevenLabs.cmd` direkt im entpackten Paket öffnen. Beim Build aus dem Quellcode liegt die Datei unter `dist`. Die lokale Einrichtung erscheint unter `http://127.0.0.1:8765`.
 2. ElevenLabs-API-Schlüssel und die gewünschte Voice-ID eintragen und **Lokal speichern** wählen.
 3. **Neuen Spiel-Agenten anlegen** wählen. Dadurch werden ein Agent und das Client-Tool `submit_game_turn` in eurem ElevenLabs-Konto erstellt. Alternativ können ein passend eingerichteter Agent und seine Tool-ID verbunden werden.
 4. **Agent prüfen**, dann **Antwort und Stimme testen**. Der Gesprächstest verbraucht ElevenLabs-Agents-Nutzung.
@@ -66,7 +66,7 @@ cd ..
 
 Verifiziert: lokale Node-Tests einschließlich getrennter Charakter-/Spielersprache, stabiler Stimmenzuordnung, paralleler Anrufer und identischer Begrüßungen; zusätzlich C#-Kontexttests, PCM-Puffertests und Hook-Signaturen der installierten Spielversion. Echte Agent-Antworten mit sprach- und stimmenspezifischen Overrides sowie ein sauber beendeter PCM-Audiostream wurden mit dem konfigurierten Konto geprüft. Das Backend sendet während der Sprachausgabe und nach Mikrofonaufnahmen stille Audio-Pakete weiter, damit Agents die Ausgabe und kurze Sprechabschnitte abschließt. Vollständige Gesprächs- und Mehrspielertests bleiben nötig.
 
-Für eine manuelle Installation: `scripts/Install-Mod.ps1 -PackageDirectory dist`. Bestehende Dateien werden unter `BepInEx/elevenlabs-agents-backups` gesichert. Installation bei laufendem Spiel wird abgelehnt.
+Für eine manuelle Installation aus dem entpackten Paket: `scripts/Install-Mod.ps1 -PackageDirectory .` (beim Quellcode-Build stattdessen `-PackageDirectory dist`). Bestehende Dateien werden unter `BepInEx/elevenlabs-agents-backups` gesichert. Installation bei laufendem Spiel wird abgelehnt.
 
 ## Quellen
 
