@@ -1,41 +1,43 @@
-# Wunschsumme für Scam With Your Friends
+# Requested Payout for Scam With Your Friends
 
-Diese separate BepInEx-Mod ersetzt die feste Belohnung des **Kreditkarten-Scams** oder **Gift-Card-Scams** durch den Preis, dem der Anrufer im Gespräch zugestimmt hat. Version **1.1.0** unterstützt beide Wege.
+This standalone BepInEx mod replaces the fixed reward for the **credit-card scam** or **gift-card scam** with the price the caller agreed to during the conversation. Version **1.1.0** supports both scams. The mod is shown as **Wunschsumme** in the launcher and the F1 menu.
 
-## Im Spiel
+## In the game
 
-1. Einen neuen Anruf beginnen und den Kreditkarten- oder Gift-Card-Scam verwenden.
-2. Einen eindeutigen ganzen Betrag nennen, zum Beispiel **„Das kostet 5.000 Euro“** oder **„Das kostet fünftausend Euro“**.
-3. Den Anrufer überzeugen, diesem Preis zuzustimmen. Das Spiel muss das Preisziel bestätigen. Bei Gift Cards müssen zuerst das Hilfsangebot und die Lösung akzeptiert sein; die Mod ergänzt dafür pro Anruf ein optionales Preisziel.
-4. Den Scam in der passenden App erfolgreich abschließen. Bei Gift Cards ist weiterhin der **korrekte fiktive Gift-Code** erforderlich. Erst dann wird die vereinbarte Summe statt der normalen 400 (Kreditkarte) beziehungsweise 200 (Gift Card) Spielgeld gutgeschrieben.
+1. Start a new call and use the credit-card or gift-card scam.
+2. State an unambiguous whole-number price, such as **"This costs 5,000 euros"** or **"This costs five thousand euros."**
+3. Convince the caller to agree to that price. The game must confirm the price objective. For gift cards, the caller must first accept the offer of help and the solution; the mod adds an optional price objective for each call.
+4. Complete the scam successfully in the appropriate app. Gift cards still require the **correct fictional gift-card code**. Only then is the agreed amount credited instead of the normal 400 game currency for a credit card or 200 for a gift card.
 
-Die Zuordnung gilt getrennt pro Anruf und Scam. Kreditkarte und Gift Card können im selben Anruf verschiedene Preise haben. Die erste bestätigte Summe bleibt fest. Die vorhandene Erfolgskontrolle und die Einmal-Auszahlung bleiben aktiv. Spieler-, verfügbares und Teamgeld werden über den normalen Serverpfad aktualisiert. Das F1-Menü zeigt Preisbestätigung und Auszahlungsstatus.
+Prices are tracked separately for each call and scam. Credit cards and gift cards can have different prices within the same call. The first confirmed amount stays fixed. The game's existing success checks and single-payout rule remain active. Personal earnings, spendable money and team money are updated through the normal server path. The F1 menu shows price confirmation and payout status.
 
-Ohne bestätigten und eindeutig erkannten Preis bleibt die normale Belohnung bestehen. Dezimalbeträge werden nicht gerundet. Kartennummern und andere Nummern gelten nicht automatisch als Preis. Es gibt keine Währungsumrechnung: Die genannte Zahl ist der Betrag in Spielgeld.
+Without a confirmed, unambiguously recognized price, the normal reward remains in effect. Decimal amounts are not rounded. Card numbers and other numbers are not automatically treated as prices. There is no currency conversion: the stated number becomes the amount in game currency.
 
-Sehr große Beträge, die zusammen mit anderen möglichen Belohnungen die native Ganzzahlgrenze überschreiten würden, verwenden die Originalbelohnung. Der gemeinsame Spielkatalog wird nicht verändert; das optionale Gift-Preisziel lebt nur in einer privaten Anrufkopie.
+Very large amounts that would exceed the game's native integer limit when combined with other possible rewards fall back to the original reward. The shared game catalog is not changed; the optional gift-card price objective exists only in a private copy for that call.
 
 ## Installation
 
-Das Spiel beenden und im angepassten Launcher unter **Get mods → Wunschsumme → Install…** installieren. Die Mod erscheint anschließend unter **Mods** und im F1-Menü.
+Close the game, then install the mod in the customized launcher under **Get mods → Wunschsumme → Install…**. It will then appear under **Mods** and in the F1 menu.
 
-Alternativ nach Entpacken des Pakets:
+Alternatively, extract the package and run:
 
 ```powershell
-.\scripts\Install-PayoutMod.ps1 -GameDirectory 'C:\Pfad\zum\Spiel' -PackageDirectory .
+.\scripts\Install-PayoutMod.ps1 -GameDirectory 'C:\Path\To\Game' -PackageDirectory .
 ```
 
-Voraussetzung ist die vorhandene BepInEx-Spielvorbereitung. Die gemeinsame Mod-Bibliothek ab 1.0.4 ist im Paket enthalten. Eine kompatible bereits installierte Bibliothek bleibt erhalten. Der Installer sichert ersetzte Dateien unter `BepInEx/requested-payout-backups`.
+The game must already be prepared for BepInEx mods. The package includes the shared mod library, version 1.0.4 or later. A compatible library that is already installed is kept. The installer backs up replaced files under `BepInEx/requested-payout-backups`.
 
-Im Mehrspieler muss der **Host** diese Mod laden. Sie benötigt weder ElevenLabs noch einen eigenen AI-Backend-Provider.
+In multiplayer, the **host** must load this mod. It requires neither ElevenLabs nor a separate AI backend provider.
 
-## Entwicklung
+## Development
 
 ```powershell
 .\payout-mod\build.ps1
 ```
 
-Tests für Beträge und Anrufzustände sowie Tests gegen die nativen Spielmethoden mit Harmony-Patches prüfen Kreditkarte und Gift Card, falsche Codes, wiederholte Einreichungen, parallele Preise, Anrufende und Überlaufgrenzen. Zusätzlich werden Installation und Backups in isolierten Ordnern geprüft.
+For version **1.1.0**, all **80 source assertions** and **72 native/Harmony assertions** pass. These tests cover amounts and call state, both scams, incorrect codes, repeated submissions, separate prices, call disposal and integer overflow limits. They also exercise the optional gift-card price objective through the game's actual dialogue evaluation and payout methods. Installation and backups are tested separately in isolated folders.
+
+The tests require a .NET 8 SDK. Native tests also require the installed game and run in a separate test process without changing game files or the running game. The native test script uses the bundled SDK when available, otherwise an installed `dotnet` from `PATH`. Use `-DotnetPath` to select another `dotnet.exe`.
 
 ```powershell
 dotnet run --project .\payout-mod\test\Payout.Tests.csproj
@@ -43,6 +45,6 @@ dotnet run --project .\payout-mod\test\Payout.Tests.csproj
 .\scripts\Test-PayoutInstaller.ps1
 ```
 
-Die Hooks sind an die auf diesem PC installierte Spielversion gebunden. Ein Spielupdate kann einen erneuten Build erfordern. Die Mod speichert keine Dialoge oder Kartennummern in ihren Protokollen.
+The hooks target the game version installed on this PC. A game update may require a rebuild. The mod does not store dialogue or card numbers in its logs.
 
-Inoffizielle Community-Mod für das fiktive Spiel.
+Unofficial community mod for the fictional game.
