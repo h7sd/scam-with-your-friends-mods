@@ -1,8 +1,8 @@
 # Community Mods for Scam With Your Friends
 
-This repository includes **ElevenLabs Agents 1.0.1**, **Wunschsumme 1.1.0** for credit card and gift card scams, and a customized Windows launcher with entries for both mods. Ready-to-use packages are available under [Releases](https://github.com/h7sd/scam-with-your-friends-mods/releases).
+This repository includes **ElevenLabs Agents 1.0.1**, **Wunschsumme 1.1.1** for credit card and gift card scams, and a customized Windows launcher with entries for both mods. Ready-to-use packages are available under [Releases](https://github.com/h7sd/scam-with-your-friends-mods/releases).
 
-For the complete setup, download and extract `SWYF-Mods-1.1.0.zip`. The smaller `Wunschsumme-SWYF-1.1.0.zip` package is also available for an existing game installation that already has BepInEx set up.
+For the complete setup, download and extract `SWYF-Mods-1.1.1.zip`. The smaller `Wunschsumme-SWYF-1.1.1.zip` package is also available for an existing game installation that already has BepInEx set up.
 
 ## ElevenLabs Agents
 
@@ -60,7 +60,7 @@ cd ..
 .\payout-mod\build.ps1
 .\scripts\Stage-Release.ps1
 .\scripts\Build-Launcher.ps1
-.\scripts\Package-Mod.ps1 -FileName SWYF-Mods-1.1.0.zip
+.\scripts\Package-Mod.ps1 -FileName SWYF-Mods-1.1.1.zip
 .\scripts\Package-PayoutMod.ps1
 ```
 
@@ -80,6 +80,8 @@ This is an unofficial community mod, unaffiliated with the game's developer.
 
 ## Additional mod: Wunschsumme
 
-The separate **Wunschsumme** mod replaces the fixed reward for a successful credit card or gift card scam with the whole-number amount agreed during the conversation. For example, "That costs five thousand euros" results in 5,000 units of in-game money after the caller accepts the price and the scam succeeds. For gift cards, the correct fictional gift code must still be submitted. The game's normal success checks remain active; merely mentioning an amount does not award money.
+The separate **Wunschsumme** mod replaces the fixed reward for a successful credit card or gift card scam with your clearly stated whole-number service price. For example, "This costs 20,000 euros" is remembered and produces 20,000 units of in-game money when the card scam succeeds. For gift cards, the correct fictional gift code must still be submitted. Saying the price itself never awards money.
+
+Version **1.1.1** fixes prices being lost when the game completes a card submission before its optional AI price objectives. The latest clear player price is remembered independently of those objectives. An explicit credit-card or gift-card price targets that scam; a generic service price applies to the supported card scams available in the call. Prices remain local to their call, and retries cannot award money twice. Optional AI price evaluation also handles large values without hitting its unrelated 10,000 metadata limit.
 
 The mod works independently of the speech backend. In multiplayer, the host must load it. The customized launcher provides a separate **Get mods** entry. Instructions and limitations are in `payout-mod/README.md`; the manual installer is `scripts/Install-PayoutMod.ps1`.

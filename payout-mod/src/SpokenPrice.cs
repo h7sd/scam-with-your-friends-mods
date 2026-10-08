@@ -6,7 +6,9 @@ namespace ScamWYF.RequestedPayout
 {
     internal static class SpokenPrice
     {
-        private static readonly Regex Context = new Regex(@"(?i)(?:€|\$|\b(?:euros?|dollars?|eur|usd|preis|price|kostet|kosten|costs?|pay|zahlen|bezahle|bezahlen)\b)");
+        private static readonly Regex Context = new Regex(@"(?i)(?:€|\$|\b(?:euros?|dollars?|eur|usd|preis|price|kostet|kosten|costs?|pay|zahlen|zahle|zahlst|bezahle|bezahlen)\b)");
+        private static readonly Regex Credential = new Regex(@"(?i)\b(?:karten(?:nummer|code)|kreditkarten(?:nummer|code)|geschenkkartencode|gutscheincode|card\s*(?:number|code)|gift\s*(?:card\s*)?code|pin|cvv|cvc|iban|konto(?:nummer)?|account\s*number|phone\s*number|telefonnummer|expiry|expiration|ablaufdatum|g[uü]ltigkeit)\b");
+        private static readonly Regex PriceQuestion = new Regex(@"(?i)(?:\b(?:preis|price)\b|(?:was|wie\s*viel|wieviel)\b.{0,35}\b(?:kostet|kosten|zahlen|bezahlen)\b|\bhow\s*much\b.{0,35}\b(?:cost|pay|service|euros?|dollars?)\b)");
         private static readonly Regex Unsafe = new Regex(@"(?i)(?:\b(?:minus|negative|negativ|cent|cents|komma|point|decimal|pence)\b|(?:^|\s|€|\$)[-−]\s*[€$]?\s*\d|\d(?:[\s-]?\d){11,18}|\b\d[\d.,]*\s*[km]\b)");
         private static readonly Regex Tokens = new Regex(@"[a-z]+|\d[\d.,]*");
         private static readonly HashSet<string> EnglishNumbers = new HashSet<string>(new[] {
@@ -77,6 +79,59 @@ namespace ScamWYF.RequestedPayout
             if(Regex.IsMatch(evidence,@"\d")) return true;
             string normalized=evidence.ToLowerInvariant().Replace('ä','a').Replace('ö','o').Replace('ü','u').Replace("ß","ss");
             foreach(Match match in Tokens.Matches(normalized)) if(IsNumberWord(match.Value)) return true;
+            return false;
+        }
+        internal static bool TryExtractOffer(string dialogue,out int amount)
+        {
+            amount=0;
+            if(string.IsNullOrWhiteSpace(dialogue)) return false;
+            if(Regex.IsMatch(dialogue,@"(?i)(?:^\s*(?:was|wie\s*viel|wieviel|how\s*much|what)\b.{0,45}\b(?:kostet|kosten|costs?|price|preis)\b|\b(?:soll(?:te)?\s+ich|should\s+i|meinst\s+du|do\s+you\s+think)\b|^\s*(?:kostet|costs?)\s+(?:das|es|it|that)\b)")) return false;
+            if(Regex.IsMatch(dialogue,@"(?i)(?:\b(?:kostet|kosten|costs?)\s+(?:nicht|not|kein(?:e|en)?)\b|\b(?:preis|price)\s+(?:(?:ist|betr[aä]gt|is)\s+)?(?:nicht|not|kein(?:e|en)?)\b|\b(?:nicht|not)\s+\d|\b(?:vielleicht|maybe|perhaps|hypothetisch|hypothetical)\b|\b(?:wenn|falls|if|w[uü]rde|could|would)\b.{0,100}\b(?:kostet|kosten|costs?)\b)")) return false;
+            // A request for card details may follow a real service price. Currency alone must
+            // not make a card/PIN/code value into a price, and multiple amounts stay ambiguous.
+            if(Credential.IsMatch(dialogue)
+                && !Regex.IsMatch(dialogue,@"(?i)\b(?:preis|price|kostet|kosten|costs?)\b")) return false;
+            return TryExtract(dialogue,out amount);
+        }
+        internal static bool TryExtractStandalone(string dialogue,out int amount)
+        {
+            amount=0;
+            if(string.IsNullOrWhiteSpace(dialogue) || dialogue.Length>200 || Credential.IsMatch(dialogue)) return false;
+            string normalized=dialogue.ToLowerInvariant().Replace('ä','a').Replace('ö','o').Replace('ü','u').Replace("ß","ss");
+            if(!Regex.IsMatch(normalized,@"^[a-z0-9.,\s]+[.!?]?$")) return false;
+            var matches=Tokens.Matches(normalized);
+            if(matches.Count==0) return false;
+            foreach(Match match in matches)
+                if(!char.IsDigit(match.Value[0]) && !IsNumberWord(match.Value)
+                    && match.Value!="and" && match.Value!="und") return false;
+            return TryExtract("Preis: "+dialogue+" Euro",out amount);
+        }
+        internal static bool IsPriceQuestion(string dialogue)
+        {
+            return !string.IsNullOrWhiteSpace(dialogue) && dialogue.Length<=5000
+                && !Credential.IsMatch(dialogue) && PriceQuestion.IsMatch(dialogue)
+                && (dialogue.IndexOf('?')>=0 || Regex.IsMatch(dialogue,@"(?i)\b(?:was|wie|wieviel|what|how|welcher|welchen|nenn|nenne|tell)\b"));
+        }
+        internal static int Scope(string dialogue)
+        {
+            if(string.IsNullOrEmpty(dialogue)) return 0;
+            int scope=0;
+            if(Regex.IsMatch(dialogue,@"(?i)\b(?:credit[\s-]?cards?|kreditkart(?:e|en)|bankkart(?:e|en))\b")) scope|=1;
+            if(Regex.IsMatch(dialogue,@"(?i)\b(?:gift[\s-]?cards?|geschenkkart(?:e|en)|gutschein(?:e|en)?)\b")) scope|=2;
+            return scope;
+        }
+        internal static bool HasNumberExpression(string dialogue)
+        {
+            if(string.IsNullOrWhiteSpace(dialogue)) return false;
+            string normalized=dialogue.ToLowerInvariant().Replace('ä','a').Replace('ö','o').Replace('ü','u').Replace("ß","ss");
+            var matches=Tokens.Matches(normalized);
+            for(int i=0;i<matches.Count;i++)
+            {
+                string value=matches[i].Value;
+                if((value=="ein" || value=="eine" || value=="einen" || value=="one")
+                    && (i+1>=matches.Count || !IsCurrency(matches[i+1].Value))) continue;
+                if(char.IsDigit(value[0]) || IsNumberWord(value)) return true;
+            }
             return false;
         }
         private static bool IsNumberWord(string value)

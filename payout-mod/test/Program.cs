@@ -35,6 +35,10 @@ internal static class Program
             { "twenty five euros", 25 },
             { "zweitausendfünfhundert Euro", 2500 },
             { "fünftausend Euro, also 5000 Euro", 5000 },
+            { "Der Preis beträgt 20000 Euro.", 20000 },
+            { "Der Preis beträgt 20.000 Euro.", 20000 },
+            { "Der Preis beträgt zwanzigtausend Euro.", 20000 },
+            { "Der Preis beträgt zwanzig tausend Euro.", 20000 },
         };
         foreach (var sample in accepted) Parse(sample.Key, true, sample.Value);
 
@@ -57,6 +61,8 @@ internal static class Program
 
         TestBook();
         TestScamPartition();
+        TestOfferBook();
+        TestOfferParser();
         Console.WriteLine("Payout source tests: " + passed + " passed, " + failed + " failed");
         Environment.ExitCode = failed == 0 ? 0 : 1;
     }
@@ -145,6 +151,76 @@ internal static class Program
         object[] args = new object[] { session, scam, 0 };
         bool found = (bool)lookup.Invoke(book, args);
         return expected == 0 ? found : found && (int)args[2] == expected;
+    }
+
+    private static void TestOfferBook()
+    {
+        Type type = typeof(PriceBook);
+        BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
+        MethodInfo offer = type.GetMethod("RecordOffer", flags, null,
+            new[] { typeof(object), typeof(string), typeof(int), typeof(int) }, null);
+        Check(offer != null, "price book exposes explicit pending-offer API");
+        if (offer == null) return;
+        MethodInfo record = type.GetMethod("Record", flags, null,
+            new[] { typeof(object), typeof(string), typeof(int), typeof(int) }, null);
+        MethodInfo lookup = type.GetMethod("TryGet", flags, null,
+            new[] { typeof(object), typeof(string), typeof(int).MakeByRefType() }, null);
+        object book = Activator.CreateInstance(type, true);
+        var session = new EqualSession();
+        var otherSession = new EqualSession();
+        offer.Invoke(book, new object[] { session, "credit-card", 1, 20000 });
+        Check(ScamGet(lookup, book, session, "credit-card", 20000), "explicit 20000 offer is remembered without AI confirmation");
+        offer.Invoke(book, new object[] { session, "credit-card", 3, 25000 });
+        Check(ScamGet(lookup, book, session, "credit-card", 25000), "newest explicit offer replaces earlier pending price");
+        offer.Invoke(book, new object[] { session, "credit-card", 2, 10000 });
+        Check(ScamGet(lookup, book, session, "credit-card", 25000), "older asynchronous offer cannot overwrite latest price");
+        offer.Invoke(book, new object[] { session, "credit-card", 3, 15000 });
+        Check(ScamGet(lookup, book, session, "credit-card", 25000), "duplicate sequence cannot silently re-price pending offer");
+        record.Invoke(book, new object[] { session, "credit-card", 1, 5000 });
+        Check(ScamGet(lookup, book, session, "credit-card", 25000), "late earlier AI price cannot replace explicit pending offer");
+        offer.Invoke(book, new object[] { session, "gift-card", 4, 7500 });
+        Check(ScamGet(lookup, book, session, "gift-card", 7500) && ScamGet(lookup, book, session, "credit-card", 25000),
+            "explicit offers remain separate for credit and gift scams");
+        Check(!ScamGet(lookup, book, otherSession, "credit-card", 0), "pending offer cannot leak into another call");
+        Method(type, "Remove").Invoke(book, new object[] { session });
+        Check(!ScamGet(lookup, book, session, "credit-card", 0) && !ScamGet(lookup, book, session, "gift-card", 0),
+            "call disposal removes all pending and confirmed offers");
+    }
+
+    private static void TestOfferParser()
+    {
+        Type type = typeof(SpokenPrice);
+        BindingFlags flags = BindingFlags.Static | BindingFlags.NonPublic;
+        MethodInfo parse = type.GetMethod("TryExtractOffer", flags);
+        MethodInfo standalone = type.GetMethod("TryExtractStandalone", flags);
+        MethodInfo scope = type.GetMethod("Scope", flags);
+        Check(parse != null && standalone != null && scope != null, "spoken price exposes offer and scope APIs");
+        if (parse == null || standalone == null || scope == null) return;
+        foreach (string text in new[] { "Der Service kostet 20000 Euro.", "Der Service kostet 20.000 Euro.",
+            "Der Service kostet zwanzigtausend Euro.", "Ich verlange 20.000 Euro für die Hilfe.",
+            "Der Preis beträgt 20000 Euro, okay?", "Nein, wie gesagt, der Service kostet einmalig 20.000 Euro.",
+            "Nein, wie gesagt, die Versicherung kostet einmalig 20.000 Euro.",
+            "Das wird einmalig was kosten, nämlich 20.000 Euro." })
+            PriceApi(parse, text, true, 20000);
+        foreach (string text in new[] { "Was kostet 20000 Euro?", "Soll ich 20000 Euro zahlen?", "Meine Kartennummer ist 4111111111111111.",
+            "Der Service kostet 20000,50 Euro.", "Der Service kostet minus zwanzigtausend Euro.",
+            "Das kostet nicht 20000 Euro.", "Wenn es 20000 Euro kostet, überlegen wir es uns.", "Vielleicht kostet der Service 20000 Euro." })
+            PriceApi(parse, text, false, 0);
+        PriceApi(standalone, "20000", true, 20000);
+        PriceApi(standalone, "Ja, 20.000", false, 0);
+        PriceApi(standalone, "zwanzigtausend", true, 20000);
+        PriceApi(standalone, "4111111111111111", false, 0);
+        Check((int)scope.Invoke(null, new object[] { "Der Service kostet 20000 Euro." }) == 0, "generic service offer is scoped to the current call");
+        Check((int)scope.Invoke(null, new object[] { "Der Kreditkarten-Service kostet 20000 Euro." }) == 1, "explicit credit-card offer has credit scope");
+        Check((int)scope.Invoke(null, new object[] { "Der Geschenkkarten-Service kostet 20000 Euro." }) == 2, "explicit gift-card offer has gift scope");
+    }
+
+    private static void PriceApi(MethodInfo method, string text, bool expected, int expectedAmount)
+    {
+        object[] args = new object[] { text, 0 };
+        bool found = (bool)method.Invoke(null, args);
+        Check(found == expected && (!expected || (int)args[1] == expectedAmount), method.Name + " " + text
+            + ": expected " + (expected ? expectedAmount.ToString() : "rejected") + ", got " + (found ? args[1].ToString() : "rejected"));
     }
 
     private static bool TryGet(MethodInfo lookup, object book, object session, int expected)

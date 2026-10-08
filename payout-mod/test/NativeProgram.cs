@@ -18,6 +18,8 @@ internal static class NativeProgram
     private const string CardValue = "fictional-test-card-value";
     private const string GiftTag = "FICTIONAL_GIFT_CARD_CODE";
     private const string GiftValue = "fictional-gift-test-code";
+    private const string ActualCardTag = "FICTIONAL_CREDIT_CARD_NUMBER";
+    private const string ActualCardValue = "4111111111111111";
 
     private static int Main(string[] args)
     {
@@ -57,13 +59,18 @@ internal static class NativeProgram
         TestQuoteEvidence();
         TestGiftCardSubmission();
         TestGiftPriceObservation();
+        TestExplicitOfferPayouts();
+        TestNativeModelPriceNormalization();
+        TestImmediatePriceAnswers();
+        TestQuoteContextFallback();
+        TestRewardSnapshotDuringChanged();
         Console.WriteLine("Payout native tests: " + passed + " passed, " + failed + " failed");
         return failed == 0 ? 0 : 1;
     }
 
     private static bool SyntheticCardDefinition(string tag, ref SentinelDefinition __result)
     {
-        if (tag != CardTag && tag != GiftTag) return true;
+        if (tag != CardTag && tag != GiftTag && tag != ActualCardTag) return true;
         __result = null;
         return false;
     }
@@ -151,12 +158,12 @@ internal static class NativeProgram
         var noAcceptedPrice = Session(out card, priceComplete: false);
         Prices().Record(noAcceptedPrice, 1, 9000);
         result = noAcceptedPrice.SubmitField("credit-card", CardTag, CardValue, Caller(), true);
-        Check(result.PayoutAwarded == 200 && noAcceptedPrice.MoneyEarned == 200, "without native explicit price acceptance only original reward is used");
+        Check(result.PayoutAwarded == 9000 && noAcceptedPrice.MoneyEarned == 9000, "confirmed amount is paid without optional native price milestone");
 
         var noService = Session(out card, serviceComplete: false);
         Prices().Record(noService, 1, 9000);
         result = noService.SubmitField("credit-card", CardTag, CardValue, Caller(), true);
-        Check(result.PayoutAwarded == 200 && noService.MoneyEarned == 200, "without native service objective only original reward is used");
+        Check(result.PayoutAwarded == 9000 && noService.MoneyEarned == 9000, "confirmed amount is paid without optional native service milestone");
 
         var disabled = Session(out card);
         Prices().Record(disabled, 1, 9000);
@@ -276,7 +283,6 @@ internal static class NativeProgram
         TestGiftFailure("missing gift caller", GiftTag, GiftValue, null, true);
 
         var noPrice = GiftSession(out card, out gift, out inputGift, agreed: false);
-        ScamRecord(noPrice, "gift-card", 1, 7500);
         result = noPrice.SubmitField("gift-card", GiftTag, GiftValue, GiftCaller(), true);
         Check(result.PayoutAwarded == 200 && noPrice.MoneyEarned == 200,
             "gift code without optional price confirmation keeps native reward");
@@ -363,8 +369,8 @@ internal static class NativeProgram
             Completed(session, "gift-card").Remove(missing);
             session.ObserveAsync(GiftPriceTurn(1)).GetAwaiter().GetResult();
             Check(!detector.SawPrice && !Completed(session, "gift-card").Contains("requested-price")
-                && !Prices().TryGet(session, "gift-card", out amount),
-                "native missing " + missing + " excludes optional price and cannot record agreement");
+                && Prices().TryGet(session, "gift-card", out amount) && amount == 7500,
+                "native missing " + missing + " excludes optional AI goal while explicit player offer stays remembered");
             session.Dispose();
         }
     }
@@ -381,6 +387,294 @@ internal static class NativeProgram
             CallerSentinels = new Dictionary<string,string>(),
             TrustBefore = 50, TrustAfter = 60,
         };
+    }
+
+    private static ConversationScamSession ActualCatalogSession()
+    {
+        // Public catalog metadata from the installed game, not the earlier simplified fixture:
+        // actual product IDs, reward 400/200, number/code final goals and native prerequisites.
+        var card = new ConversationScamDefinition {
+            id = "credit-card", appId = "credit-card", productId = "scam-credit-card", reward = 400,
+            objectives = new[] {
+                new ConversationScamObjective { id = "service" },
+                new ConversationScamObjective { id = "price", prerequisites = new[] { "service" } },
+                new ConversationScamObjective { id = "number", final = true, requiresSubmission = true,
+                    requiredSentinel = ActualCardTag, prerequisites = new[] { "service", "price" } },
+            },
+        };
+        var gift = new ConversationScamDefinition {
+            id = "gift-card", appId = "gift-card", productId = "scam-gift-card", reward = 200,
+            objectives = new[] {
+                new ConversationScamObjective { id = "pitch" },
+                new ConversationScamObjective { id = "solution", prerequisites = new[] { "pitch" } },
+                new ConversationScamObjective { id = "code", final = true, requiresSubmission = true,
+                    requiredSentinel = GiftTag, prerequisites = new[] { "pitch", "solution" } },
+            },
+        };
+        return new ConversationScamSession(new[] { card, gift }, new FixtureDetector());
+    }
+
+    private static ConversationScamTurn ActualOfferTurn(string dialogue, int sequence, bool hidden = false, bool fallback = false)
+    {
+        return new ConversationScamTurn {
+            Sequence = sequence, PlayerDialogue = dialogue, CallerDialogue = "Ja.", RecentDialogue = "",
+            OwnedProducts = new[] { "scam-credit-card", "scam-gift-card" },
+            VisibleAppIds = new[] { "credit-card", "gift-card" },
+            CallerSentinels = new Dictionary<string,string>(), TrustBefore = 50, TrustAfter = 50,
+            Hidden = hidden, Fallback = fallback,
+        };
+    }
+
+    private static SentinelCallState ActualCaller()
+    {
+        var caller = new SentinelCallState();
+        var infos = (IDictionary)AccessTools.Field(typeof(SentinelCallState), "infosByTag").GetValue(caller);
+        infos.Add(ActualCardTag, new SentinelInfo { Tag = ActualCardTag, RawValue = ActualCardValue, IsRevealed = true });
+        infos.Add(GiftTag, new SentinelInfo { Tag = GiftTag, RawValue = GiftValue, IsRevealed = true });
+        return caller;
+    }
+
+    private static ScamFieldVerificationResult ActualSubmit(ConversationScamSession session, string scam, string value = null)
+    {
+        bool gift = scam == "gift-card";
+        return session.SubmitField(scam, gift ? GiftTag : ActualCardTag, value ?? (gift ? GiftValue : ActualCardValue), ActualCaller(), true);
+    }
+
+    private static void TestExplicitOfferPayouts()
+    {
+        foreach (string offer in new[] { "Der Service kostet 20000 Euro.", "Der Service kostet 20.000 Euro.",
+            "Der Service kostet zwanzigtausend Euro." })
+        {
+            foreach (string scam in new[] { "credit-card", "gift-card" })
+            {
+                PayoutHooks.Clear();
+                var session = ActualCatalogSession();
+                int awardCalls = 0, changedMoney = -1;
+                var turn = ActualOfferTurn(offer, 1);
+                turn.AwardReward = (definition, payout) => { awardCalls++; return true; };
+                session.Changed += () => changedMoney = session.MoneyEarned;
+                session.ObserveAsync(turn).GetAwaiter().GetResult();
+                Check(Completed(session, "credit-card").Count == 0 && Completed(session, "gift-card").Count == 0,
+                    scam + " actual catalog price offer needs no service/price/pitch/solution milestones");
+                Check(session.MoneyEarned == 0 && awardCalls == 0, scam + " explicit offer alone awards no money");
+                int quote;
+                Check(Prices().TryGet(session, "credit-card", out quote) && quote == 20000
+                    && Prices().TryGet(session, "gift-card", out quote) && quote == 20000,
+                    scam + " generic service offer is remembered for both scams in this call");
+                var failure = ActualSubmit(session, scam, "wrong-code");
+                Check(failure.PayoutAwarded == 0 && session.MoneyEarned == 0, scam + " wrong code after 20000 offer pays nothing");
+                var result = ActualSubmit(session, scam);
+                Check(result.PayoutAwarded == 20000 && session.MoneyEarned == 20000 && changedMoney == 20000,
+                    scam + " actual native verified code pays stated 20000 with brief caller yes: " + offer);
+                result = ActualSubmit(session, scam);
+                Check(result.PayoutAwarded == 0 && session.MoneyEarned == 20000,
+                    scam + " retry after explicit 20000 payout is idempotent");
+                session.Dispose();
+            }
+        }
+
+        PayoutHooks.Clear();
+        var scoped = ActualCatalogSession();
+        scoped.ObserveAsync(ActualOfferTurn("Der Kreditkarten-Service kostet 20000 Euro.", 1)).GetAwaiter().GetResult();
+        int amount;
+        Check(Prices().TryGet(scoped, "credit-card", out amount) && amount == 20000
+            && !Prices().TryGet(scoped, "gift-card", out amount), "explicit credit-card offer cannot price gift scam");
+        var giftOriginal = ActualSubmit(scoped, "gift-card");
+        Check(giftOriginal.PayoutAwarded == 200, "unpriced gift scam keeps actual original reward200");
+        scoped.ObserveAsync(ActualOfferTurn("Der Kreditkarten-Service kostet 25000 Euro.", 3)).GetAwaiter().GetResult();
+        scoped.ObserveAsync(ActualOfferTurn("Der Kreditkarten-Service kostet 10000 Euro.", 2)).GetAwaiter().GetResult();
+        Check(Prices().TryGet(scoped, "credit-card", out amount) && amount == 25000,
+            "newest observed credit offer wins over older out-of-order turn");
+        Prices().Record(scoped, "credit-card", 1, 5000);
+        var latest = ActualSubmit(scoped, "credit-card");
+        Check(latest.PayoutAwarded == 25000 && scoped.MoneyEarned == 25200,
+            "late AI-confirmed earlier amount cannot override latest explicit 25000 offer");
+        scoped.Dispose();
+
+        var giftScoped = ActualCatalogSession();
+        giftScoped.ObserveAsync(ActualOfferTurn("Der Geschenkkarten-Service kostet 7500 Euro.", 1)).GetAwaiter().GetResult();
+        Check(Prices().TryGet(giftScoped, "gift-card", out amount) && amount == 7500
+            && !Prices().TryGet(giftScoped, "credit-card", out amount), "explicit gift offer cannot price credit scam");
+        var creditOriginal = ActualSubmit(giftScoped, "credit-card");
+        Check(creditOriginal.PayoutAwarded == 400, "unpriced credit scam keeps actual original reward400");
+        giftScoped.Dispose();
+
+        var first = ActualCatalogSession();
+        first.ObserveAsync(ActualOfferTurn("Der Service kostet 20000 Euro.", 1)).GetAwaiter().GetResult();
+        var other = ActualCatalogSession();
+        Check(!Prices().TryGet(other, "credit-card", out amount) && !Prices().TryGet(other, "gift-card", out amount),
+            "generic offer cannot leak into another call");
+        other.Dispose();
+        first.Dispose();
+        first.ObserveAsync(ActualOfferTurn("Der Service kostet 30000 Euro.", 2)).GetAwaiter().GetResult();
+        Check(!Prices().TryGet(first, "credit-card", out amount) && !Prices().TryGet(first, "gift-card", out amount),
+            "late ObserveAsync after Dispose cannot resurrect pending offers");
+
+        foreach (bool fallback in new[] { false, true })
+        {
+            var excluded = ActualCatalogSession();
+            excluded.ObserveAsync(ActualOfferTurn("Der Service kostet 20000 Euro.", 1, hidden: !fallback, fallback: fallback)).GetAwaiter().GetResult();
+            Check(!Prices().TryGet(excluded, "credit-card", out amount) && !Prices().TryGet(excluded, "gift-card", out amount),
+                (fallback ? "fallback" : "hidden") + " turn cannot supply an explicit payout offer");
+            excluded.Dispose();
+        }
+    }
+
+    private static void TestNativeModelPriceNormalization()
+    {
+        foreach (string scam in new[] { "credit-card", "gift-card" })
+        {
+            PayoutHooks.Clear();
+            var session = ActualCatalogSession();
+            ConversationScamDefinition definition = null;
+            foreach (var entry in (IReadOnlyList<ConversationScamDefinition>)AccessTools.Field(typeof(ConversationScamSession), "catalog").GetValue(session))
+                if (entry.id == scam) definition = entry;
+            string priceId = scam == "credit-card" ? "price" : "requested-price";
+            ConversationScamObjective objective = null;
+            foreach (var entry in definition.objectives) if (entry.id == priceId) objective = entry;
+            var candidate = new ConversationScamCandidate { Scam = definition, Objective = objective };
+            var turn = ActualOfferTurn("Ich benötige Hilfe.", 1);
+            turn.CallerDialogue = "Ja, der Servicepreis beträgt 20000 Euro.";
+            AccessTools.Method(typeof(PayoutHooks), "ObservePrefix").Invoke(null, new object[] { session, turn });
+            var evidence = Evidence(candidate.Key, turn.PlayerDialogue, turn.CallerDialogue);
+            evidence["amount"] = 20000;
+            string json = new JObject { ["achievements"] = new JArray(evidence) }.ToString();
+            var parsed = (IReadOnlyList<ConversationScamDetection>)AccessTools.Method(typeof(ConversationScamAiDetector), "Parse")
+                .Invoke(null, new object[] { json, new[] { candidate }, turn, null });
+            Check(parsed.Count == 1 && parsed[0].Amount == 0,
+                scam + " model price amount20000 is normalized to native non-final metadata0");
+            int amount;
+            Check(Prices().TryGet(session, scam, out amount) && amount == 20000,
+                scam + " model metadata normalization preserves evidence price20000");
+            var nonPrice = new ConversationScamCandidate { Scam = definition, Objective = definition.objectives[0] };
+            evidence = Evidence(nonPrice.Key, turn.PlayerDialogue, turn.CallerDialogue);
+            evidence["amount"] = 20000;
+            json = new JObject { ["achievements"] = new JArray(evidence) }.ToString();
+            parsed = (IReadOnlyList<ConversationScamDetection>)AccessTools.Method(typeof(ConversationScamAiDetector), "Parse")
+                .Invoke(null, new object[] { json, new[] { nonPrice }, turn, null });
+            Check(parsed.Count == 0, scam + " non-price objective retains native amount cap");
+            session.Dispose();
+        }
+    }
+
+    private static void TestImmediatePriceAnswers()
+    {
+        foreach (string answer in new[] { "20000", "20.000", "zwanzigtausend" })
+        {
+            var session = ActualCatalogSession();
+            var question = ActualOfferTurn("Hallo.", 1);
+            question.CallerDialogue = "Was kostet Ihr Service?";
+            session.ObserveAsync(question).GetAwaiter().GetResult();
+            session.ObserveAsync(ActualOfferTurn(answer, 2)).GetAwaiter().GetResult();
+            int amount;
+            Check(Prices().TryGet(session, "credit-card", out amount) && amount == 20000
+                && Prices().TryGet(session, "gift-card", out amount) && amount == 20000,
+                "immediate standalone answer to a caller price question records20000: " + answer);
+            Check(ActualSubmit(session, "credit-card").PayoutAwarded == 20000,
+                "immediate price answer reaches native verified credit payout: " + answer);
+            session.Dispose();
+        }
+        var scoped = ActualCatalogSession();
+        var scopedQuestion = ActualOfferTurn("Hallo.", 1);
+        scopedQuestion.CallerDialogue = "Wie hoch ist der Kreditkarten-Preis?";
+        scoped.ObserveAsync(scopedQuestion).GetAwaiter().GetResult();
+        scoped.ObserveAsync(ActualOfferTurn("20000", 2)).GetAwaiter().GetResult();
+        int stored;
+        Check(Prices().TryGet(scoped, "credit-card", out stored) && stored == 20000
+            && !Prices().TryGet(scoped, "gift-card", out stored), "bare answer preserves caller-question credit scope");
+        scoped.Dispose();
+
+        var stale = ActualCatalogSession();
+        var priorQuestion = ActualOfferTurn("Hallo.", 1);
+        priorQuestion.CallerDialogue = "Was kostet Ihr Service?";
+        stale.ObserveAsync(priorQuestion).GetAwaiter().GetResult();
+        stale.ObserveAsync(ActualOfferTurn("Einen Moment.", 2)).GetAwaiter().GetResult();
+        stale.ObserveAsync(ActualOfferTurn("20000", 3)).GetAwaiter().GetResult();
+        Check(!Prices().TryGet(stale, "credit-card", out stored) && !Prices().TryGet(stale, "gift-card", out stored),
+            "non-immediate number does not reuse earlier price-question context");
+        stale.Dispose();
+
+        foreach (string callerQuestion in new[] { "Wie lautet Ihre Kartennummer?", "Welche PIN haben Sie?",
+            "Wie lautet der Giftcode?", "Was kostet der Service, und welche PIN haben Sie?" })
+        {
+            var credential = ActualCatalogSession();
+            var question = ActualOfferTurn("Hallo.", 1);
+            question.CallerDialogue = callerQuestion;
+            credential.ObserveAsync(question).GetAwaiter().GetResult();
+            credential.ObserveAsync(ActualOfferTurn("20000", 2)).GetAwaiter().GetResult();
+            Check(!Prices().TryGet(credential, "credit-card", out stored) && !Prices().TryGet(credential, "gift-card", out stored),
+                "card/PIN/code question cannot supply price context: " + callerQuestion);
+            credential.Dispose();
+        }
+
+        foreach (string unsafeOffer in new[] { "Was kostet 20000 Euro?", "Soll ich 20000 Euro zahlen?",
+            "Die PIN lautet 20000 Euro.", "Der Giftcode lautet 20000 Euro.", "Meine Kartennummer ist 4111111111111111." })
+        {
+            var session = ActualCatalogSession();
+            session.ObserveAsync(ActualOfferTurn(unsafeOffer, 1)).GetAwaiter().GetResult();
+            Check(!Prices().TryGet(session, "credit-card", out stored) && !Prices().TryGet(session, "gift-card", out stored),
+                "inquiry or credential is not an explicit price offer: " + unsafeOffer);
+            session.Dispose();
+        }
+    }
+
+    private static void TestQuoteContextFallback()
+    {
+        foreach (bool fullContext in new[] { true, false })
+        {
+            PayoutHooks.Clear();
+            ConversationScamDefinition card;
+            var session = Session(out card, priceComplete: false, serviceComplete: false);
+            var candidate = new ConversationScamCandidate { Scam = card, Objective = card.objectives[1] };
+            var turn = new ConversationScamTurn {
+                Sequence = 1, PlayerDialogue = fullContext ? "Der Service kostet 20000 Euro." : "20000",
+                CallerDialogue = "Ja, 20000",
+            };
+            AccessTools.Method(typeof(PayoutHooks), "ObservePrefix").Invoke(null, new object[] { session, turn });
+            string json = new JObject { ["achievements"] = new JArray(Evidence(candidate.Key, "20000", turn.CallerDialogue)) }.ToString();
+            var parsed = (IReadOnlyList<ConversationScamDetection>)AccessTools.Method(typeof(ConversationScamAiDetector), "Parse")
+                .Invoke(null, new object[] { json, new[] { candidate }, turn, null });
+            int amount;
+            bool found = Prices().TryGet(session, "credit-card", out amount);
+            Check(parsed.Count == 1 && (fullContext ? found && amount == 20000 : !found),
+                fullContext ? "short exact price quotes recover20000 from full exchange currency context"
+                    : "two bare quotes without full price context do not fabricate a payout amount");
+            session.Dispose();
+        }
+
+        var crossTurn = ActualCatalogSession();
+        crossTurn.ObserveAsync(ActualOfferTurn("Der Service kostet 20.000 Euro.", 1)).GetAwaiter().GetResult();
+        var briefAcceptance = ActualOfferTurn("Die Hilfe läuft jetzt.", 2);
+        briefAcceptance.CallerDialogue = "Ja, 20.000.";
+        crossTurn.ObserveAsync(briefAcceptance).GetAwaiter().GetResult();
+        Check(ActualSubmit(crossTurn, "credit-card").PayoutAwarded == 20000,
+            "full player offer stays remembered across later bare caller acceptance");
+        crossTurn.Dispose();
+    }
+
+    private static void TestRewardSnapshotDuringChanged()
+    {
+        var session = ActualCatalogSession();
+        session.ObserveAsync(ActualOfferTurn("Der Service kostet 20000 Euro.", 1)).GetAwaiter().GetResult();
+        session.Changed += () => Prices().RecordOffer(session, "credit-card", 2, 30000);
+        var result = ActualSubmit(session, "credit-card");
+        Check(result.PayoutAwarded == 20000 && session.MoneyEarned == 20000,
+            "price change during native Changed event cannot split progress20000 from payout result30000");
+        session.Dispose();
+        foreach (bool clear in new[] { false, true })
+        {
+            session = ActualCatalogSession();
+            session.ObserveAsync(ActualOfferTurn("Der Service kostet 20000 Euro.", 1)).GetAwaiter().GetResult();
+            session.Changed += () => {
+                if (clear) PayoutHooks.Clear();
+                else Plugin.Current.PayoutEnabled.Value = false;
+            };
+            result = ActualSubmit(session, "credit-card");
+            Check(result.PayoutAwarded == 20000 && session.MoneyEarned == 20000,
+                (clear ? "clearing quote book" : "disabling mod") + " during Changed preserves already-written native payout amount");
+            Plugin.Current.PayoutEnabled.Value = true;
+            session.Dispose();
+        }
     }
 
     private static void TestQuoteEvidence()

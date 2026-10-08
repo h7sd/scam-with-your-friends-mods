@@ -11,7 +11,7 @@ namespace ScamWYF.RequestedPayout
             public new bool Equals(object left, object right) { return ReferenceEquals(left,right); }
             public int GetHashCode(object value) { return RuntimeHelpers.GetHashCode(value); }
         }
-        private sealed class Quote { internal int Sequence; internal int Amount; }
+        private sealed class Quote { internal int Sequence; internal int Amount; internal bool ExplicitOffer; }
         private readonly Dictionary<object,Dictionary<string,Quote>> quotes = new Dictionary<object,Dictionary<string,Quote>>(new IdentityComparer());
         private readonly object sync = new object();
         internal bool Record(object session, int sequence, int amount)
@@ -34,6 +34,26 @@ namespace ScamWYF.RequestedPayout
                 // immutable; recovered/duplicate evaluator results cannot silently re-price it.
                 if (perScam.TryGetValue(scamId,out old)) return false;
                 perScam[scamId] = new Quote {Sequence=sequence,Amount=amount};
+                return true;
+            }
+        }
+        internal bool RecordOffer(object session,string scamId,int sequence,int amount)
+        {
+            if(session==null || string.IsNullOrEmpty(scamId) || sequence<0 || amount<=0) return false;
+            lock(sync)
+            {
+                Dictionary<string,Quote> perScam;
+                if(!quotes.TryGetValue(session,out perScam))
+                {
+                    perScam=new Dictionary<string,Quote>(StringComparer.Ordinal);
+                    quotes[session]=perScam;
+                }
+                Quote old;
+                if(perScam.TryGetValue(scamId,out old)
+                    && (old.Sequence>sequence || (old.ExplicitOffer && old.Sequence==sequence))) return false;
+                // A new explicit player offer supersedes a frozen evaluator agreement. Older
+                // async/recovered results and duplicate turns cannot change that offer again.
+                perScam[scamId]=new Quote {Sequence=sequence,Amount=amount,ExplicitOffer=true};
                 return true;
             }
         }

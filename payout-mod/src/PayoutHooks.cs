@@ -13,8 +13,10 @@ namespace ScamWYF.RequestedPayout
     {
         private static readonly PriceBook prices = new PriceBook();
         private static readonly Dictionary<ConversationScamTurn,ConversationScamSession> owners = new Dictionary<ConversationScamTurn,ConversationScamSession>();
+        private sealed class PricePrompt {internal int Sequence;internal int Scope;}
+        private static readonly Dictionary<ConversationScamSession,PricePrompt> prompts = new Dictionary<ConversationScamSession,PricePrompt>();
         private static readonly object sync = new object();
-        private static FieldInfo progressField, catalogField, completedField, moneyEarnedField;
+        private static FieldInfo progressField, catalogField, completedField, moneyEarnedField, disposedField;
         private static MethodInfo containsQuote;
         private static readonly MethodInfo memberwiseClone=AccessTools.Method(typeof(object),"MemberwiseClone");
 
@@ -22,7 +24,8 @@ namespace ScamWYF.RequestedPayout
         {
             progressField = AccessTools.Field(typeof(ConversationScamSession),"progress");
             catalogField = AccessTools.Field(typeof(ConversationScamSession),"catalog");
-            if (progressField == null || catalogField == null) throw new InvalidOperationException("Native conversation scam state changed.");
+            disposedField = AccessTools.Field(typeof(ConversationScamSession),"disposed");
+            if (progressField == null || catalogField == null || disposedField==null) throw new InvalidOperationException("Native conversation scam state changed.");
             completedField = AccessTools.Field(progressField.FieldType.GetGenericArguments()[1],"Completed");
             moneyEarnedField = AccessTools.Field(progressField.FieldType.GetGenericArguments()[1],"MoneyEarned");
             if (completedField == null || moneyEarnedField==null) throw new InvalidOperationException("Native objective completion state changed.");
@@ -38,7 +41,7 @@ namespace ScamWYF.RequestedPayout
                 throw new InvalidOperationException("Could not install gift-card caller prompt.");
             Patch(plugin,typeof(ConversationScamSession),"ObserveAsync",new[]{typeof(ConversationScamTurn)},"ObservePrefix",null,null);
             Patch(plugin,typeof(ConversationScamAiDetector),"BuildInput",new[]{typeof(IReadOnlyList<ConversationScamCandidate>),typeof(ConversationScamTurn)},null,"InputPostfix",null);
-            Patch(plugin,typeof(ConversationScamAiDetector),"Parse",new[]{typeof(string),typeof(IReadOnlyList<ConversationScamCandidate>),typeof(ConversationScamTurn),typeof(Action<string>)},null,"DetectionPostfix",null);
+            Patch(plugin,typeof(ConversationScamAiDetector),"Parse",new[]{typeof(string),typeof(IReadOnlyList<ConversationScamCandidate>),typeof(ConversationScamTurn),typeof(Action<string>)},"DetectionPrefix","DetectionPostfix",null);
             Patch(plugin,typeof(ConversationScamSession),"SubmitField",new[]{typeof(string),typeof(string),typeof(string),typeof(SentinelCallState),typeof(bool)},null,"SubmissionPostfix","RewardTranspiler");
             Patch(plugin,typeof(ConversationScamSession),"Dispose",Type.EmptyTypes,"DisposePrefix",null,null);
         }
@@ -95,13 +98,64 @@ namespace ScamWYF.RequestedPayout
         }
         private static void ObservePrefix(ConversationScamSession __instance,ConversationScamTurn turn)
         {
-            if (!Enabled || turn==null || turn.Hidden || turn.Fallback) return;
+            if (!Enabled || turn==null || turn.Hidden || turn.Fallback || (bool)disposedField.GetValue(__instance)) return;
             lock(sync)
             {
+                int available=AvailableScopes(__instance,turn);
+                int scope=SpokenPrice.Scope(turn.PlayerDialogue),amount;
+                bool offered=SpokenPrice.TryExtractOffer(turn.PlayerDialogue,out amount);
+                PricePrompt prompt;
+                if(!offered && prompts.TryGetValue(__instance,out prompt)
+                    && (long)prompt.Sequence+1==turn.Sequence
+                    && SpokenPrice.TryExtractStandalone(turn.PlayerDialogue,out amount))
+                {
+                    offered=true;scope=prompt.Scope;
+                }
+                if(offered)
+                {
+                    if(scope==0) scope=available;
+                    scope&=available;
+                    bool recorded=false;
+                    if((scope&1)!=0) recorded|=prices.RecordOffer(__instance,"credit-card",turn.Sequence,amount);
+                    if((scope&2)!=0) recorded|=prices.RecordOffer(__instance,"gift-card",turn.Sequence,amount);
+                    if(recorded)
+                    {
+                        Plugin.Current.AcceptedPrices++;Plugin.Current.LastAmount=amount;
+                        Plugin.Current.LastStatus="Wunschbetrag "+amount+" erkannt; Auszahlung wartet auf erfolgreiche native Karten- oder Gift-Code-Prüfung.";
+                    }
+                }
+                if(!prompts.TryGetValue(__instance,out prompt) || turn.Sequence>=prompt.Sequence)
+                {
+                    int questionScope=SpokenPrice.Scope(turn.CallerDialogue);
+                    questionScope=questionScope==0?available:questionScope&available;
+                    if(questionScope!=0 && SpokenPrice.IsPriceQuestion(turn.CallerDialogue))
+                        prompts[__instance]=new PricePrompt {Sequence=turn.Sequence,Scope=questionScope};
+                    else prompts.Remove(__instance);
+                }
                 owners[turn]=__instance;
                 if(turn.RecoveredExchanges!=null) foreach(var recovery in turn.RecoveredExchanges)
                     if(recovery!=null && recovery.Turn!=null) owners[recovery.Turn]=__instance;
             }
+        }
+        private static int AvailableScopes(ConversationScamSession session,ConversationScamTurn turn)
+        {
+            var catalog=catalogField.GetValue(session) as IReadOnlyList<ConversationScamDefinition>;
+            if(catalog==null) return 0;
+            int available=0;
+            foreach(var definition in catalog)
+            {
+                if(definition==null || !Supported(definition.id)) continue;
+                bool owned=Has(turn.OwnedProducts,definition.productId) || Has(turn.OwnedProducts,definition.id)
+                    || Has(turn.VisibleAppIds,definition.appId) || Has(turn.VisibleAppIds,definition.id);
+                if(owned) available|=definition.id=="credit-card"?1:2;
+            }
+            return available;
+        }
+        private static bool Has(string[] values,string wanted)
+        {
+            if(values==null || string.IsNullOrEmpty(wanted)) return false;
+            foreach(string value in values) if(value==wanted) return true;
+            return false;
         }
         private static bool IsPrice(ConversationScamCandidate candidate)
         {
@@ -117,6 +171,42 @@ namespace ScamWYF.RequestedPayout
                 __result += "\nFor credit-card price or gift-card requested-price objectives, select an exact player_evidence or caller_evidence quote containing the concrete accepted price and its currency or service-price wording. The caller must explicitly agree; mere mention, a refusal or a hypothetical is insufficient. Keep the existing JSON schema; use amount=0 for these non-final objectives. Do not quote card numbers or gift-card codes as prices.";
                 return;
             }
+        }
+        private static void DetectionPrefix(ref string json,IReadOnlyList<ConversationScamCandidate> candidates,ConversationScamTurn turn)
+        {
+            if(!Enabled || turn==null || turn.Hidden || turn.Fallback || string.IsNullOrWhiteSpace(json)) return;
+            JObject data;
+            try {data=JObject.Parse(json);} catch(Exception) {return;}
+            var achievements=data["achievements"] as JArray;
+            if(achievements==null) return;
+            bool changed=false;
+            foreach(var token in achievements)
+            {
+                var evidence=token as JObject;
+                if(evidence==null || evidence.Count!=5
+                    || evidence["key"]==null || evidence["key"].Type!=JTokenType.String
+                    || evidence["sequence"]==null || evidence["sequence"].Type!=JTokenType.Integer
+                    || evidence["amount"]==null || evidence["amount"].Type!=JTokenType.Integer
+                    || evidence["player_evidence"]==null || evidence["player_evidence"].Type!=JTokenType.String
+                    || evidence["caller_evidence"]==null || evidence["caller_evidence"].Type!=JTokenType.String) continue;
+                long sequence,metadataAmount;
+                try {sequence=(long)evidence["sequence"];metadataAmount=(long)evidence["amount"];} catch(Exception) {continue;}
+                if(metadataAmount<=0 || metadataAmount>2147483647L) continue;
+                IReadOnlyList<ConversationScamCandidate> eligible=null;
+                if(sequence==turn.Sequence) eligible=candidates;
+                else if(turn.RecoveredExchanges!=null) foreach(var recovery in turn.RecoveredExchanges)
+                    if(recovery!=null && recovery.Turn!=null && !recovery.Turn.Hidden && !recovery.Turn.Fallback
+                        && recovery.Turn.Sequence==sequence) {eligible=recovery.Candidates;break;}
+                if(eligible==null) continue;
+                foreach(var candidate in eligible)
+                    if(IsPrice(candidate) && !candidate.Objective.final && candidate.Key==(string)evidence["key"])
+                    {
+                        // Price is evidence, not a native reward tier. Let native Parse continue
+                        // validating the exact schema, eligibility, speakers and duplicate keys.
+                        evidence["amount"]=0;changed=true;break;
+                    }
+            }
+            if(changed) json=data.ToString(Newtonsoft.Json.Formatting.None);
         }
         private static void DetectionPostfix(string json,IReadOnlyList<ConversationScamCandidate> candidates,ConversationScamTurn turn,IReadOnlyList<ConversationScamDetection> __result)
         {
@@ -145,11 +235,15 @@ namespace ScamWYF.RequestedPayout
                 var evidence=FirstAcceptedEvidence(achievements,detection,exchange);
                 if(evidence!=null)
                 {
-                    int offered,accepted;
-                    bool playerHas=SpokenPrice.TryExtract((string)evidence["player_evidence"],out offered);
-                    bool callerHas=SpokenPrice.TryExtract((string)evidence["caller_evidence"],out accepted);
-                    if(!playerHas && SpokenPrice.HasPriceExpression((string)evidence["player_evidence"])) continue;
-                    if(!callerHas && SpokenPrice.HasPriceExpression((string)evidence["caller_evidence"])) continue;
+                    int offered,accepted,contextAmount;
+                    bool contextHas=ExchangePrice(exchange,out contextAmount);
+                    string playerEvidence=(string)evidence["player_evidence"],callerEvidence=(string)evidence["caller_evidence"];
+                    bool playerHas=QuotePrice(playerEvidence,contextHas,contextAmount,out offered);
+                    bool callerHas=QuotePrice(callerEvidence,contextHas,contextAmount,out accepted);
+                    if(!playerHas && (SpokenPrice.HasPriceExpression(playerEvidence)
+                        || (contextHas && SpokenPrice.HasNumberExpression(playerEvidence)))) continue;
+                    if(!callerHas && (SpokenPrice.HasPriceExpression(callerEvidence)
+                        || (contextHas && SpokenPrice.HasNumberExpression(callerEvidence)))) continue;
                     if(!playerHas && !callerHas) continue;
                     if(playerHas && callerHas && offered!=accepted) continue;
                     int amount=playerHas?offered:accepted;
@@ -170,6 +264,24 @@ namespace ScamWYF.RequestedPayout
                     }
                 }
             }
+        }
+        private static bool ExchangePrice(ConversationScamTurn exchange,out int amount)
+        {
+            int player,caller;amount=0;
+            bool hasPlayer=SpokenPrice.TryExtract(exchange.PlayerDialogue,out player);
+            bool hasCaller=SpokenPrice.TryExtract(exchange.CallerDialogue,out caller);
+            if(hasPlayer && hasCaller && player!=caller) return false;
+            if(hasPlayer) {amount=player;return true;}
+            if(hasCaller) {amount=caller;return true;}
+            return false;
+        }
+        private static bool QuotePrice(string evidence,bool hasContext,int contextAmount,out int amount)
+        {
+            if(SpokenPrice.TryExtract(evidence,out amount)) return true;
+            amount=0;int quoted;
+            if(hasContext && SpokenPrice.TryExtract("Preis: "+evidence+" Euro",out quoted) && quoted==contextAmount)
+            {amount=quoted;return true;}
+            return false;
         }
         private static JObject FirstAcceptedEvidence(JArray achievements,ConversationScamDetection detection,ConversationScamTurn exchange)
         {
@@ -214,15 +326,21 @@ namespace ScamWYF.RequestedPayout
         internal static int ResolveReward(ConversationScamDefinition definition,ConversationScamSession session)
         {
             int original=definition.reward;
-            if(!Enabled || !Supported(definition.id)) return original;
+            if(!Supported(definition.id)) return original;
+            var progress=progressField.GetValue(session) as IDictionary;
+            if(progress!=null && progress.Contains(definition.id))
+            {
+                // SubmitField writes MoneyEarned before Changed, then reads reward again for
+                // its result. A newer offer, disable or Clear in Changed cannot split the award.
+                int written=(int)moneyEarnedField.GetValue(progress[definition.id]);
+                if(written>0) return written;
+            }
+            if(!Enabled) return original;
             int amount;
             if(!prices.TryGet(session,definition.id,out amount)) return original;
-            var progress=progressField.GetValue(session) as IDictionary;
             if(progress==null || !progress.Contains(definition.id)) return original;
-            var completed=completedField.GetValue(progress[definition.id]) as HashSet<string>;
-            if(completed==null) return original;
-            if(definition.id=="credit-card" && (!completed.Contains("price") || !completed.Contains("service"))) return original;
-            if(definition.id=="gift-card" && (!completed.Contains("requested-price") || !completed.Contains("pitch") || !completed.Contains("solution"))) return original;
+            // SubmitField already reached its native success branch. Optional/evaluator dialogue
+            // milestones cannot discard an explicit offer after the real card/code was verified.
             // The game's total is Enumerable.Sum<int>. Reserve the maximum of each OTHER native
             // scam, so a later legitimate reward cannot overflow after the requested amount.
             long reserved=0;
@@ -259,11 +377,12 @@ namespace ScamWYF.RequestedPayout
             lock(sync)
             {
                 prices.Remove(__instance);
+                prompts.Remove(__instance);
                 var remove=new List<ConversationScamTurn>();
                 foreach(var pair in owners) if(ReferenceEquals(pair.Value,__instance)) remove.Add(pair.Key);
                 foreach(var turn in remove) owners.Remove(turn);
             }
         }
-        internal static void Clear() { lock(sync){owners.Clear();prices.Clear();} }
+        internal static void Clear() { lock(sync){owners.Clear();prompts.Clear();prices.Clear();} }
     }
 }

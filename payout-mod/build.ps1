@@ -51,7 +51,7 @@ internal static class PluginBuildInfo {public const string Version="$Version";pu
 Build-Library -Name 'ScamWYF.Modding.Core' -Sources (Join-Path $libraryRoot 'src') -Version '1.0.4'
 $extra=@('Newtonsoft.Json.dll','Assembly-CSharp.dll','ScriptsAssDef.dll','Mirror.dll','UniTask.dll') | ForEach-Object {Join-Path $managed $_}
 $extra+=Join-Path $output 'ScamWYF.Modding.Core.dll'
-Build-Library -Name 'ScamWYF.RequestedPayout' -Sources (Join-Path $PSScriptRoot 'src') -Version '1.1.0' -Extra $extra
+Build-Library -Name 'ScamWYF.RequestedPayout' -Sources (Join-Path $PSScriptRoot 'src') -Version '1.1.1' -Extra $extra
 Add-Type -Path (Join-Path $core 'Mono.Cecil.dll')
 $assembly=[Mono.Cecil.AssemblyDefinition]::ReadAssembly((Join-Path $output 'ScamWYF.RequestedPayout.dll'))
 try {
