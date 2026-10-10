@@ -16,7 +16,7 @@ foreach ($relative in $entries.Values) {
 }
 Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-$zipPath = Join-Path $projectRoot 'Requested-Payout-SWYF-1.1.3.zip'
+$zipPath = Join-Path $projectRoot 'Requested-Payout-SWYF-1.2.0.zip'
 $stream = [IO.File]::Open($zipPath, [IO.FileMode]::Create)
 $archive = [IO.Compression.ZipArchive]::new($stream, [IO.Compression.ZipArchiveMode]::Create)
 try {

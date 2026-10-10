@@ -1,6 +1,6 @@
 # Requested Payout for Scam With Your Friends
 
-This standalone BepInEx mod remembers your clearly stated whole-number service price. It pays the **original reward plus your requested amount for credit cards**. Gift cards pay the requested amount in place of their original reward. Version **1.1.3** is named **Requested Payout** in the launcher and the F1 menu, with English interface text and status messages. German and English spoken prices are still supported.
+This standalone BepInEx mod remembers your clearly stated whole-number service price. It pays the **original reward plus your requested amount for credit cards**. Gift cards pay the requested amount in place of their original reward. Version **1.2.0** is named **Requested Payout** in the launcher and the F1 menu, with English interface text and status messages. German and English spoken prices are still supported.
 
 ## In the game
 
@@ -45,7 +45,7 @@ In multiplayer, the **host** must load this mod. It requires neither ElevenLabs 
 
 Regression tests cover clear 20,000 offers followed by native card submissions with no optional price goals completed, both card scams, incorrect codes, repeated submissions, scoped and generic offers, delayed AI results, call disposal and integer overflow limits. Optional price evaluation also runs through the game's actual methods. Installation and backups are tested separately in isolated folders.
 
-Version **1.1.3** passes **117 source assertions** and **159 native/Harmony assertions**. The native tests use the actual 400/200 rewards and `scam-*` product IDs from the installed game catalog. They check combined credit-card payouts, gift-card payouts, both submission orders, repeated submissions, integer limits, and matching recorded earnings and returned payouts when the price changes or the mod is disabled during the native completion event.
+The payout logic was validated with **117 source assertions** and **159 native/Harmony assertions**. Version **1.2.0** changes version metadata and package names, retaining that logic. The native tests use the actual 400/200 rewards and `scam-*` product IDs from the installed game catalog. They check combined credit-card payouts, gift-card payouts, both submission orders, repeated submissions, integer limits, and matching recorded earnings and returned payouts when the price changes or the mod is disabled during the native completion event.
 
 The tests require a .NET 8 SDK. Native tests also require the installed game and run in a separate test process without changing game files or the running game. The native test script uses the bundled SDK when available, otherwise an installed `dotnet` from `PATH`. Use `-DotnetPath` to select another `dotnet.exe`.
 

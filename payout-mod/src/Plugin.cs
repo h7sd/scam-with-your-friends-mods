@@ -7,7 +7,7 @@ using UnityEngine.UIElements;
 
 namespace ScamWYF.RequestedPayout
 {
-    [BepInPlugin(PluginGuid, "Requested Payout", "1.1.3")]
+    [BepInPlugin(PluginGuid, "Requested Payout", "1.2.0")]
     public sealed class Plugin : ScamMod
     {
         public const string PluginGuid = "com.community.scamwyf.requestedpayout";

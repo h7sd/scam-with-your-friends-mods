@@ -113,7 +113,7 @@ $packages = @(
         (Join-Path $dist 'BepInEx\plugins\ScamWYF.AiBackend.dll'),
         (Join-Path $dist 'BepInEx\core\ScamWYF.Modding.Core.dll')
     ) },
-    [pscustomobject]@{ Name = 'Requested-Payout-1.1.3.zip'; Files = @(
+    [pscustomobject]@{ Name = 'Requested-Payout-1.2.0.zip'; Files = @(
         [IO.Path]::GetFullPath($PayoutModPath),
         (Join-Path $dist 'BepInEx\core\ScamWYF.Modding.Core.dll')
     ) }
@@ -139,7 +139,7 @@ foreach ($package in $packages) {
 
 $env:DOTNET_SKIP_FIRST_TIME_EXPERIENCE = '1'
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
-$buildArguments = @('build', (Join-Path $build 'Launcher.csproj'), '-c', 'Release', '-o', $output, '-p:Version=1.1.3', '-p:InformationalVersion=1.1.3-localmods')
+$buildArguments = @('build', (Join-Path $build 'Launcher.csproj'), '-c', 'Release', '-o', $output, '-p:Version=1.2.0', '-p:InformationalVersion=1.2.0-localmods')
 if ($NugetSource) { $buildArguments += @('--source', $NugetSource, '-p:NuGetAudit=false') }
 & $DotnetPath @buildArguments
 if ($LASTEXITCODE -ne 0) { throw 'The local launcher build failed.' }

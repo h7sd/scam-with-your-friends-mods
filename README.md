@@ -1,8 +1,8 @@
 # Community Mods for Scam With Your Friends
 
-This repository includes **ElevenLabs Agents 1.0.1**, **Requested Payout 1.1.3** for credit card and gift card scams, and a customized Windows launcher with entries for both mods. Ready-to-use packages are available under [Releases](https://github.com/h7sd/scam-with-your-friends-mods/releases).
+This repository includes **ElevenLabs Agents 1.0.1**, **Requested Payout 1.2.0** for credit card and gift card scams, and a customized Windows launcher with entries for both mods. Ready-to-use packages are available under [Releases](https://github.com/h7sd/scam-with-your-friends-mods/releases).
 
-For the complete setup, download and extract `SWYF-Mods-1.1.3.zip`. The smaller `Requested-Payout-SWYF-1.1.3.zip` package is also available for an existing game installation that already has BepInEx set up.
+For the complete setup, download and extract `SWYF-Mods-1.2.0.zip`. The smaller `Requested-Payout-SWYF-1.2.0.zip` package is also available for an existing game installation that already has BepInEx set up.
 
 ## ElevenLabs Agents
 
@@ -80,7 +80,7 @@ This is an unofficial community mod, unaffiliated with the game's developer.
 
 ## Additional mod: Requested Payout
 
-The separate **Requested Payout** mod remembers your clearly stated whole-number service price. It adds that amount to the original reward for a successful **credit-card scam**: a 20,000 price plus the normal 400 reward pays **20,400** units of in-game money. A **gift-card scam** pays the requested amount, replacing its normal reward, and still requires the correct fictional gift code. Saying the price itself never awards money. Version **1.1.3** uses an English name, F1 interface and status messages.
+The separate **Requested Payout** mod remembers your clearly stated whole-number service price. It adds that amount to the original reward for a successful **credit-card scam**: a 20,000 price plus the normal 400 reward pays **20,400** units of in-game money. A **gift-card scam** pays the requested amount, replacing its normal reward, and still requires the correct fictional gift code. Saying the price itself never awards money. Version **1.2.0** includes the English name, F1 interface and status messages.
 
 The latest clear player price is remembered independently of the game's optional AI price objectives, retaining the fixes introduced in **1.1.1**. An explicit credit-card or gift-card price targets that scam; a generic service price applies to the supported card scams available in the call. Prices remain local to their call, and retries cannot award money twice. Optional AI price evaluation also handles large values without hitting its unrelated 10,000 metadata limit.
 
