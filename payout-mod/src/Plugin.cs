@@ -7,7 +7,7 @@ using UnityEngine.UIElements;
 
 namespace ScamWYF.RequestedPayout
 {
-    [BepInPlugin(PluginGuid, "Wunschsumme", "1.1.2")]
+    [BepInPlugin(PluginGuid, "Requested Payout", "1.1.3")]
     public sealed class Plugin : ScamMod
     {
         public const string PluginGuid = "com.community.scamwyf.requestedpayout";
@@ -16,17 +16,17 @@ namespace ScamWYF.RequestedPayout
         internal int AcceptedPrices;
         internal int RequestedPayouts;
         internal int LastAmount;
-        internal string LastStatus = "Warte auf einen klar genannten Wunschbetrag für Kreditkarte oder Gift Card.";
+        internal string LastStatus = "Waiting for a clearly stated credit-card or gift-card service price.";
 
         protected override void OnModLoad()
         {
             Current = this;
             PayoutEnabled = Config.Bind("General", "Enabled", true,
-                "Remember the latest clearly stated whole-number player service price. Credit cards pay the original reward plus that requested amount; gift cards pay the requested amount instead of the original reward. Payment still requires successful native card/code verification.");
+                "Remember the latest clearly stated whole-number player service price. Credit cards pay the original reward plus that requested amount; gift cards pay the requested amount instead of the original reward. Payment still requires successful card/code verification in the game.");
             WatchConfig();
             PayoutHooks.Install(this);
-            ModMenu.AddPage(this,"Wunschsumme",BuildPage,-10);
-            ModLog.LogInfo("Wunschsumme: Wunschbetrag-Erkennung und serverseitige Kreditkarten-/Gift-Card-Auszahlung aktiv.");
+            ModMenu.AddPage(this,"Requested Payout",BuildPage,-10);
+            ModLog.LogInfo("Requested Payout: tracking requested amounts and applying credit-card/gift-card payouts on the server.");
         }
         protected override void OnModUnload()
         {
@@ -40,14 +40,14 @@ namespace ScamWYF.RequestedPayout
         }
         private void BuildPage(VisualElement page)
         {
-            Widgets.Heading(page,"Wunschsumme: Kreditkarte und Gift Card");
-            Widgets.FieldRow(page,"Status",PayoutEnabled.Value ? "Aktiv (Host / Server)" : "Deaktiviert");
-            Widgets.Paragraph(page,"Der zuletzt klar von dir genannte ganze Servicepreis wird als Wunschbetrag gespeichert. Nach erfolgreicher Prüfung der fiktiven Kreditkarte zahlt das Spiel Originalbelohnung plus Wunschbetrag: bei 400 Originalbelohnung und 20.000 Wunschbetrag also 20.400. Bei Gift Cards ersetzt der Wunschbetrag weiterhin die Originalbelohnung. Zusätzliche KI-Gesprächsziele sind dafür nicht nötig. Ohne erkannten Betrag bleibt die Originalbelohnung. Kreditkarte und Gift Card sowie verschiedene Anrufe bleiben getrennt.");
-            Widgets.FieldRow(page,"Erkannte Wunschbeträge",AcceptedPrices.ToString());
-            Widgets.FieldRow(page,"Auszahlungen",RequestedPayouts.ToString());
-            if (LastAmount > 0) Widgets.FieldRow(page,"Letzter Wunschbetrag",LastAmount.ToString());
+            Widgets.Heading(page,"Requested Payout: Credit Card and Gift Card");
+            Widgets.FieldRow(page,"Status",PayoutEnabled.Value ? "Enabled (Host / Server)" : "Disabled");
+            Widgets.Paragraph(page,"The latest clearly stated whole-number service price is saved as the requested amount. After the fictional credit card is successfully verified, the game pays the original reward plus the requested amount: a 400 base reward and a 20,000 request pay 20,400. For gift cards, the requested amount replaces the original reward. Additional AI dialogue objectives are not required. If no amount is detected, the original reward applies. Credit cards, gift cards, and separate calls are tracked independently.");
+            Widgets.FieldRow(page,"Amounts detected",AcceptedPrices.ToString());
+            Widgets.FieldRow(page,"Payouts",RequestedPayouts.ToString());
+            if (LastAmount > 0) Widgets.FieldRow(page,"Last requested amount",LastAmount.ToString());
             Widgets.Note(page,LastStatus);
-            Widgets.Note(page,"Nur positive ganze Spielgeldeinheiten. Mehrdeutige, negative und Dezimalbeträge werden ignoriert. Ein sehr großer Betrag muss Platz für die anderen nativen Anrufbelohnungen lassen. Kartenwerte und Dialoge werden von dieser Mod nicht protokolliert.");
+            Widgets.Note(page,"Only positive whole units of in-game currency are accepted. Ambiguous, negative, and decimal amounts are ignored. Very large amounts must leave room for the call's other rewards. This mod does not log card values or dialogue.");
             ConfigEditor.Build(page);
         }
     }

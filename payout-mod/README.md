@@ -1,12 +1,12 @@
 # Requested Payout for Scam With Your Friends
 
-This standalone BepInEx mod remembers your clearly stated whole-number service price. Version **1.1.2** pays the **original reward plus your requested amount for credit cards**. Gift cards pay the requested amount in place of their original reward. The mod is shown as **Wunschsumme** in the launcher and the F1 menu.
+This standalone BepInEx mod remembers your clearly stated whole-number service price. It pays the **original reward plus your requested amount for credit cards**. Gift cards pay the requested amount in place of their original reward. Version **1.1.3** is named **Requested Payout** in the launcher and the F1 menu, with English interface text and status messages. German and English spoken prices are still supported.
 
 ## In the game
 
 1. Start a new call and use the credit-card or gift-card scam.
 2. State an unambiguous whole-number price, such as **"This costs 20,000 euros"**, **"This costs twenty thousand euros"** or **"Das kostet zwanzigtausend Euro."**
-3. Check the **Wunschsumme** F1 page: the requested amount should be remembered. You can state a new clear price before completing the scam. The game no longer needs to confirm its optional AI price objective first.
+3. Check the **Requested Payout** F1 page: the requested amount should be remembered. You can state a new clear price before completing the scam. The game no longer needs to confirm its optional AI price objective first.
 4. Complete the scam successfully in the appropriate app. A **credit card** with a requested price of 20,000 pays **20,400**: the requested 20,000 plus the game's original 400 reward. A **gift card** with a requested price of 20,000 pays **20,000** and still requires the **correct fictional gift-card code**.
 
 Prices are tracked separately for each call and scam. An offer mentioning **credit card/Kreditkarte** targets the credit-card scam; one mentioning **gift card/Geschenkkarte/Gutschein** targets the gift-card scam. A generic service price applies to the supported card scams available in that call. The latest clear player offer wins over older offers and delayed AI results. The game's existing card verification and single-payout rule remain active. Personal earnings, spendable money and team money are updated through the normal server path. The F1 menu shows the requested amount and payout status.
@@ -25,7 +25,7 @@ The native game can award a successful card submission before its optional servi
 
 ## Installation
 
-Close the game, then install the mod in the customized launcher under **Get mods → Wunschsumme → Install…**. It will then appear under **Mods** and in the F1 menu.
+Close the game, then install the mod in the customized launcher under **Get mods → Requested Payout → Install…**. It will then appear under **Mods** and in the F1 menu.
 
 Alternatively, extract the package and run:
 
@@ -45,7 +45,7 @@ In multiplayer, the **host** must load this mod. It requires neither ElevenLabs 
 
 Regression tests cover clear 20,000 offers followed by native card submissions with no optional price goals completed, both card scams, incorrect codes, repeated submissions, scoped and generic offers, delayed AI results, call disposal and integer overflow limits. Optional price evaluation also runs through the game's actual methods. Installation and backups are tested separately in isolated folders.
 
-Version **1.1.2** passes **117 source assertions** and **159 native/Harmony assertions**. The native tests use the actual 400/200 rewards and `scam-*` product IDs from the installed game catalog. They check combined credit-card payouts, gift-card payouts, both submission orders, repeated submissions, integer limits, and matching recorded earnings and returned payouts when the price changes or the mod is disabled during the native completion event.
+Version **1.1.3** passes **117 source assertions** and **159 native/Harmony assertions**. The native tests use the actual 400/200 rewards and `scam-*` product IDs from the installed game catalog. They check combined credit-card payouts, gift-card payouts, both submission orders, repeated submissions, integer limits, and matching recorded earnings and returned payouts when the price changes or the mod is disabled during the native completion event.
 
 The tests require a .NET 8 SDK. Native tests also require the installed game and run in a separate test process without changing game files or the running game. The native test script uses the bundled SDK when available, otherwise an installed `dotnet` from `PATH`. Use `-DotnetPath` to select another `dotnet.exe`.
 

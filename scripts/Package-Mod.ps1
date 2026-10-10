@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([string]$ProjectDirectory = (Split-Path -Parent $PSScriptRoot), [string]$PackageDirectory, [string]$FileName = 'SWYF-Mods-1.1.2.zip')
+param([string]$ProjectDirectory = (Split-Path -Parent $PSScriptRoot), [string]$PackageDirectory, [string]$FileName = 'SWYF-Mods-1.1.3.zip')
 $ErrorActionPreference = 'Stop'
 $projectRoot = [IO.Path]::GetFullPath($ProjectDirectory)
 $packageRoot = if ($PackageDirectory) { [IO.Path]::GetFullPath($PackageDirectory) } else { Join-Path $projectRoot 'dist' }

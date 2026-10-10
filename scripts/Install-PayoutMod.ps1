@@ -10,7 +10,7 @@ $gamePath = Resolve-ScamGameDirectory $GameDirectory
 Assert-ScamGameClosed
 $packagePath = [IO.Path]::GetFullPath($PackageDirectory)
 $loader = Get-ScamChildPath $gamePath 'BepInEx\core\BepInEx.dll'
-if (-not (Test-Path -LiteralPath $loader -PathType Leaf)) { throw 'Complete BepInEx Setup before installing Wunschsumme.' }
+if (-not (Test-Path -LiteralPath $loader -PathType Leaf)) { throw 'Complete BepInEx Setup before installing Requested Payout.' }
 if (-not (Test-Path -LiteralPath (Get-ScamChildPath $gamePath 'winhttp.dll') -PathType Leaf) -or
     -not (Test-Path -LiteralPath (Get-ScamChildPath $gamePath 'unstripped_corlib\mscorlib.dll') -PathType Leaf)) {
     throw 'Game modding setup is incomplete. Complete Setup in the launcher first.'
@@ -39,8 +39,8 @@ if ($coreRequired) {
 $disabledRelative = 'BepInEx\plugins_disabled\ScamWYF.RequestedPayout.dll'
 $backupRelatives = @($copyRelatives) + @($disabledRelative)
 Write-Output "Game folder: $gamePath"
-Write-Output "Installs Wunschsumme $($pluginAssembly.Version)."
-if (-not $PSCmdlet.ShouldProcess($gamePath, 'Back up existing payout files and install Wunschsumme')) { return }
+Write-Output "Installs Requested Payout $($pluginAssembly.Version)."
+if (-not $PSCmdlet.ShouldProcess($gamePath, 'Back up existing payout files and install Requested Payout')) { return }
 Assert-ScamGameClosed
 $backupRelative = 'BepInEx\requested-payout-backups\' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff') + '-' + [guid]::NewGuid().ToString('N').Substring(0, 8)
 $backupPath = Get-ScamChildPath $gamePath $backupRelative
@@ -71,7 +71,7 @@ catch {
         if ($existing.ContainsKey($relative)) { [IO.File]::Copy($existing[$relative], $destination, $true) }
         elseif (Test-Path -LiteralPath $destination -PathType Leaf) { Remove-Item -LiteralPath $destination -Force }
     }
-    throw 'Wunschsumme installation failed; changed files were restored from the backup.'
+    throw 'Requested Payout installation failed; changed files were restored from the backup.'
 }
-Write-Output 'Installed Wunschsumme. Start a new call after launching the game.'
+Write-Output 'Installed Requested Payout. Start a new call after launching the game.'
 if ($existing.Count -gt 0) { Write-Output "Previous payout files backed up in: $backupPath" }

@@ -51,7 +51,7 @@ namespace ScamWYF.RequestedPayout
                 prefix: prefix==null?null:new HarmonyMethod(AccessTools.Method(typeof(PayoutHooks),prefix)),
                 postfix: postfix==null?null:new HarmonyMethod(AccessTools.Method(typeof(PayoutHooks),postfix)),
                 transpiler: transpiler==null?null:new HarmonyMethod(AccessTools.Method(typeof(PayoutHooks),transpiler))))
-                throw new InvalidOperationException("Could not install Wunschsumme hook: "+type.Name+"."+name);
+                throw new InvalidOperationException("Could not install Requested Payout hook: "+type.Name+"."+name);
         }
         private static bool Enabled { get { return Plugin.Current != null && Plugin.Current.PayoutEnabled.Value; } }
         private static bool Supported(string id) {return id=="credit-card" || id=="gift-card";}
@@ -121,7 +121,7 @@ namespace ScamWYF.RequestedPayout
                     if(recorded)
                     {
                         Plugin.Current.AcceptedPrices++;Plugin.Current.LastAmount=amount;
-                        Plugin.Current.LastStatus="Wunschbetrag "+amount+" erkannt; Auszahlung wartet auf erfolgreiche native Karten- oder Gift-Code-Prüfung.";
+                        Plugin.Current.LastStatus="Requested amount "+amount+" detected; payment awaits successful card or gift-code verification.";
                     }
                 }
                 if(!prompts.TryGetValue(__instance,out prompt) || turn.Sequence>=prompt.Sequence)
@@ -260,7 +260,7 @@ namespace ScamWYF.RequestedPayout
                     {
                         var plugin=Plugin.Current;
                         plugin.AcceptedPrices++;plugin.LastAmount=amount;
-                        plugin.LastStatus=(scamId=="gift-card"?"Gift-Card-Preis":"Kreditkarten-Preis")+" bestätigt; Auszahlung wartet auf erfolgreiche native Prüfung.";
+                        plugin.LastStatus=(scamId=="gift-card"?"Gift-card price":"Credit-card price")+" confirmed; payment awaits successful card or gift-code verification.";
                     }
                 }
             }
@@ -359,7 +359,7 @@ namespace ScamWYF.RequestedPayout
             }
             if(total<=0 || total+reserved>2147483647L)
             {
-                Plugin.Current.LastStatus="Wunschbetrag überschreitet die sichere native Gesamtsumme; Originalbelohnung bleibt erhalten.";
+                Plugin.Current.LastStatus="The requested amount exceeds the safe total for this call; the original reward is retained.";
                 return original;
             }
             return (int)total;
@@ -392,8 +392,8 @@ namespace ScamWYF.RequestedPayout
             }
             Plugin.Current.RequestedPayouts++;
             Plugin.Current.LastStatus=appId=="gift-card"
-                ?"Native Gift-Code-Prüfung erfolgreich: "+__result.PayoutAwarded+" Spielgeld ausgezahlt."
-                :"Native Kartenprüfung erfolgreich: "+__result.PayoutAwarded+" Spielgeld ausgezahlt ("+definition.reward+" Originalbelohnung + "+paidRequested+" Wunschbetrag).";
+                ?"Gift-code verification succeeded: "+__result.PayoutAwarded+" in-game currency paid."
+                :"Card verification succeeded: "+__result.PayoutAwarded+" in-game currency paid ("+definition.reward+" original reward + "+paidRequested+" requested amount).";
         }
         private static void DisposePrefix(ConversationScamSession __instance)
         {

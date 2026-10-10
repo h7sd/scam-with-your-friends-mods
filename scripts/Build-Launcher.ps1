@@ -1,5 +1,5 @@
 <#
-Builds a separate launcher with bundled local ElevenLabs Agents and Wunschsumme entries.
+Builds a separate launcher with bundled local ElevenLabs Agents and Requested Payout entries.
 The upstream checkout stays untouched. Build the AI DLLs into dist/BepInEx and the payout DLL first.
 Use -OutputDirectory to build a release beside the running launcher without replacing its executable.
 #>
@@ -102,8 +102,8 @@ Replace-LauncherSource 'src\ModInstaller.cs' @'
             var written = new List<string>();
 '@
 Replace-LauncherSource 'src\ModInstaller.cs' '            text.AppendLine("Files come from " + plan.Release.Package.Name + " on GitHub, " +' '            text.AppendLine("Files come from " + plan.Release.Package.Name + (LocalModPackage.IsLocal(plan.Release) ? " bundled with this launcher, " : " on GitHub, ") +'
-Replace-LauncherSource 'src\MainWindow.xaml.cs' 'Scam With Your Friends - modding ' 'Scam With Your Friends - ElevenLabs Agents + Wunschsumme - Launcher '
-Replace-LauncherSource 'src\views\GetModsView.xaml' 'Mods are downloaded over https and checked against the SHA-256 GitHub publishes for them.' 'The ElevenLabs Agents and Wunschsumme packages are bundled locally with this launcher. Other mods are downloaded over https and checked against the SHA-256 GitHub publishes for them.'
+Replace-LauncherSource 'src\MainWindow.xaml.cs' 'Scam With Your Friends - modding ' 'Scam With Your Friends - ElevenLabs Agents + Requested Payout - Launcher '
+Replace-LauncherSource 'src\views\GetModsView.xaml' 'Mods are downloaded over https and checked against the SHA-256 GitHub publishes for them.' 'The ElevenLabs Agents and Requested Payout packages are bundled locally with this launcher. Other mods are downloaded over https and checked against the SHA-256 GitHub publishes for them.'
 
 $packageFolder = Join-Path $output 'LocalPackages'
 [IO.Directory]::CreateDirectory($packageFolder) | Out-Null
@@ -113,7 +113,7 @@ $packages = @(
         (Join-Path $dist 'BepInEx\plugins\ScamWYF.AiBackend.dll'),
         (Join-Path $dist 'BepInEx\core\ScamWYF.Modding.Core.dll')
     ) },
-    [pscustomobject]@{ Name = 'Wunschsumme-1.1.2.zip'; Files = @(
+    [pscustomobject]@{ Name = 'Requested-Payout-1.1.3.zip'; Files = @(
         [IO.Path]::GetFullPath($PayoutModPath),
         (Join-Path $dist 'BepInEx\core\ScamWYF.Modding.Core.dll')
     ) }
@@ -139,7 +139,7 @@ foreach ($package in $packages) {
 
 $env:DOTNET_SKIP_FIRST_TIME_EXPERIENCE = '1'
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
-$buildArguments = @('build', (Join-Path $build 'Launcher.csproj'), '-c', 'Release', '-o', $output, '-p:Version=1.1.2', '-p:InformationalVersion=1.1.2-localmods')
+$buildArguments = @('build', (Join-Path $build 'Launcher.csproj'), '-c', 'Release', '-o', $output, '-p:Version=1.1.3', '-p:InformationalVersion=1.1.3-localmods')
 if ($NugetSource) { $buildArguments += @('--source', $NugetSource, '-p:NuGetAudit=false') }
 & $DotnetPath @buildArguments
 if ($LASTEXITCODE -ne 0) { throw 'The local launcher build failed.' }

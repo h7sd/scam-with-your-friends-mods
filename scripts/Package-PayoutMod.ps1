@@ -16,7 +16,7 @@ foreach ($relative in $entries.Values) {
 }
 Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-$zipPath = Join-Path $projectRoot 'Wunschsumme-SWYF-1.1.2.zip'
+$zipPath = Join-Path $projectRoot 'Requested-Payout-SWYF-1.1.3.zip'
 $stream = [IO.File]::Open($zipPath, [IO.FileMode]::Create)
 $archive = [IO.Compression.ZipArchive]::new($stream, [IO.Compression.ZipArchiveMode]::Create)
 try {
@@ -32,7 +32,7 @@ try {
     if ($actualNames.Count -ne $entries.Count -or @($entries.Keys | Where-Object { $actualNames -notcontains $_ }).Count) {
         throw 'Payout package contents are incomplete.'
     }
-    Write-Output "Wunschsumme package verified: $($actualNames.Count) files."
+    Write-Output "Requested Payout package verified: $($actualNames.Count) files."
 }
 finally { $verification.Dispose() }
 Get-Item -LiteralPath $zipPath | Select-Object Name,Length
