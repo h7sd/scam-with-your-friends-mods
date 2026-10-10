@@ -339,6 +339,7 @@ namespace ScamWYF.RequestedPayout
             int amount;
             if(!prices.TryGet(session,definition.id,out amount)) return original;
             if(progress==null || !progress.Contains(definition.id)) return original;
+            long total=RequestedReward(definition,amount);
             // SubmitField already reached its native success branch. Optional/evaluator dialogue
             // milestones cannot discard an explicit offer after the real card/code was verified.
             // The game's total is Enumerable.Sum<int>. Reserve the maximum of each OTHER native
@@ -348,29 +349,51 @@ namespace ScamWYF.RequestedPayout
             if(catalog!=null) foreach(var scam in catalog)
             {
                 if(scam==null || scam.id==definition.id) continue;
-                int maximum=Math.Max(0,scam.reward);
+                long maximum=Math.Max(0,scam.reward);
                 if(scam.rewardTiers!=null) foreach(int tier in scam.rewardTiers) maximum=Math.Max(maximum,tier);
                 int otherPrice;
-                if(prices.TryGet(session,scam.id,out otherPrice)) maximum=Math.Max(maximum,otherPrice);
+                if(prices.TryGet(session,scam.id,out otherPrice)) maximum=Math.Max(maximum,RequestedReward(scam,otherPrice));
                 if(progress.Contains(scam.id)) maximum=Math.Max(maximum,(int)moneyEarnedField.GetValue(progress[scam.id]));
                 reserved+=maximum;
+                if(reserved>2147483647L) break;
             }
-            if((long)amount+reserved>2147483647L)
+            if(total<=0 || total+reserved>2147483647L)
             {
                 Plugin.Current.LastStatus="Wunschbetrag überschreitet die sichere native Gesamtsumme; Originalbelohnung bleibt erhalten.";
                 return original;
             }
-            return amount;
+            return (int)total;
+        }
+        internal static long RequestedReward(ConversationScamDefinition definition,int amount)
+        {
+            return definition.id=="credit-card"?(long)definition.reward+amount:amount;
         }
         private static void SubmissionPostfix(ConversationScamSession __instance,string appId,ScamFieldVerificationResult __result)
         {
             if(!Enabled || !Supported(appId) || __result.PayoutAwarded<=0) return;
-            int amount;
-            if(prices.TryGet(__instance,appId,out amount) && __result.PayoutAwarded==amount)
+            var catalog=catalogField.GetValue(__instance) as IReadOnlyList<ConversationScamDefinition>;
+            ConversationScamDefinition definition=null;
+            if(catalog!=null) foreach(var item in catalog)
+                if(item!=null && item.id==appId) {definition=item;break;}
+            if(definition==null) return;
+            long paidRequested;
+            if(appId=="credit-card")
             {
-                Plugin.Current.RequestedPayouts++;
-                Plugin.Current.LastStatus=(appId=="gift-card"?"Native Gift-Code-Prüfung":"Native Kartenprüfung")+" erfolgreich: "+amount+" Spielgeld ausgezahlt.";
+                // MoneyEarned/result already froze the award. A Changed subscriber may have
+                // replaced the pending quote; report the paid amount rather than that new offer.
+                paidRequested=(long)__result.PayoutAwarded-definition.reward;
+                if(paidRequested<=0) return;
             }
+            else
+            {
+                int amount;
+                if(!prices.TryGet(__instance,appId,out amount) || __result.PayoutAwarded!=RequestedReward(definition,amount)) return;
+                paidRequested=amount;
+            }
+            Plugin.Current.RequestedPayouts++;
+            Plugin.Current.LastStatus=appId=="gift-card"
+                ?"Native Gift-Code-Prüfung erfolgreich: "+__result.PayoutAwarded+" Spielgeld ausgezahlt."
+                :"Native Kartenprüfung erfolgreich: "+__result.PayoutAwarded+" Spielgeld ausgezahlt ("+definition.reward+" Originalbelohnung + "+paidRequested+" Wunschbetrag).";
         }
         private static void DisposePrefix(ConversationScamSession __instance)
         {

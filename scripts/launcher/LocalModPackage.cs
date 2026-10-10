@@ -32,9 +32,9 @@ namespace ScamWYF.Launcher
                     new ModFile("ScamWYF.AiBackend.dll", ModFolder.Plugins, true),
                     new ModFile("ScamWYF.Modding.Core.dll", ModFolder.Core, false)
                 }),
-            new PackageDefinition("local-package:requested-payout", "Wunschsumme-1.1.1.zip",
-                "Wunschsumme", "v1.1.1 (local)",
-                "Pays the clearly stated in-game amount after a successful credit-card or gift-card scam.",
+            new PackageDefinition("local-package:requested-payout", "Wunschsumme-1.1.2.zip",
+                "Wunschsumme", "v1.1.2 (local)",
+                "After success: credit cards pay the original reward plus the clearly offered amount; gift cards pay the agreed price.",
                 "Install-PayoutMod.ps1", "BepInEx\\requested-payout-backups", new[] {
                     new ModFile("ScamWYF.RequestedPayout.dll", ModFolder.Plugins, true),
                     new ModFile("ScamWYF.Modding.Core.dll", ModFolder.Core, false)

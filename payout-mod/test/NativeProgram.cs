@@ -64,6 +64,7 @@ internal static class NativeProgram
         TestImmediatePriceAnswers();
         TestQuoteContextFallback();
         TestRewardSnapshotDuringChanged();
+        TestCreditBaseAndRequestedAmount();
         Console.WriteLine("Payout native tests: " + passed + " passed, " + failed + " failed");
         return failed == 0 ? 0 : 1;
     }
@@ -129,16 +130,16 @@ internal static class NativeProgram
         int moneyAtChanged = -1;
         session.Changed += () => moneyAtChanged = session.MoneyEarned;
         var result = session.SubmitField("credit-card", CardTag, CardValue, Caller(), true);
-        Check(result.PayoutAwarded == 5000 && session.MoneyEarned == 5000, "native success result and Progress.MoneyEarned both use 5000");
-        Check(moneyAtChanged == 5000, "native Changed subscribers see requested amount before result returns");
+        Check(result.PayoutAwarded == 5200 && session.MoneyEarned == 5200, "native credit success result and progress use base200 plus requested5000");
+        Check(moneyAtChanged == 5200, "native Changed subscribers see complete credit award5200 before result returns");
         Check(card.reward == 200, "shared native catalog reward remains unchanged");
         result = session.SubmitField("credit-card", CardTag, CardValue, Caller(), true);
-        Check(result.PayoutAwarded == 0 && session.MoneyEarned == 5000, "repeat SubmitField pays nothing and keeps existing progress");
+        Check(result.PayoutAwarded == 0 && session.MoneyEarned == 5200, "repeat credit submission pays neither base nor requested amount again");
 
         var otherCall = Session(out card);
         Prices().Record(otherCall, 1, 7500);
         result = otherCall.SubmitField("credit-card", CardTag, CardValue, Caller(), true);
-        Check(result.PayoutAwarded == 7500 && otherCall.MoneyEarned == 7500 && session.MoneyEarned == 5000, "native parallel sessions keep separate reward and progress");
+        Check(result.PayoutAwarded == 7700 && otherCall.MoneyEarned == 7700 && session.MoneyEarned == 5200, "native parallel credit sessions keep separate full awards and progress");
 
         TestFailure("card mismatch", CardTag, "wrong-card", Caller(), true);
         TestFailure("unauthorized caller", CardTag, CardValue, Caller(), false);
@@ -158,12 +159,12 @@ internal static class NativeProgram
         var noAcceptedPrice = Session(out card, priceComplete: false);
         Prices().Record(noAcceptedPrice, 1, 9000);
         result = noAcceptedPrice.SubmitField("credit-card", CardTag, CardValue, Caller(), true);
-        Check(result.PayoutAwarded == 9000 && noAcceptedPrice.MoneyEarned == 9000, "confirmed amount is paid without optional native price milestone");
+        Check(result.PayoutAwarded == 9200 && noAcceptedPrice.MoneyEarned == 9200, "base plus confirmed amount is paid without optional native price milestone");
 
         var noService = Session(out card, serviceComplete: false);
         Prices().Record(noService, 1, 9000);
         result = noService.SubmitField("credit-card", CardTag, CardValue, Caller(), true);
-        Check(result.PayoutAwarded == 9000 && noService.MoneyEarned == 9000, "confirmed amount is paid without optional native service milestone");
+        Check(result.PayoutAwarded == 9200 && noService.MoneyEarned == 9200, "base plus confirmed amount is paid without optional native service milestone");
 
         var disabled = Session(out card);
         Prices().Record(disabled, 1, 9000);
@@ -178,9 +179,9 @@ internal static class NativeProgram
         Check(result.PayoutAwarded == 200 && nearLimit.MoneyEarned == 200, "unsafe native int total retains original reward");
 
         var safeLimit = Session(out card, otherReward: 100);
-        Prices().Record(safeLimit, 1, int.MaxValue - 100);
+        Prices().Record(safeLimit, 1, int.MaxValue - 300);
         result = safeLimit.SubmitField("credit-card", CardTag, CardValue, Caller(), true);
-        Check(result.PayoutAwarded == int.MaxValue - 100 && safeLimit.MoneyEarned == int.MaxValue - 100, "safe maximum reserves remaining native rewards");
+        Check(result.PayoutAwarded == int.MaxValue - 100 && safeLimit.MoneyEarned == int.MaxValue - 100, "safe maximum includes credit base200 and reserves other reward100");
     }
 
     private static void TestFailure(string name, string tag, string value, SentinelCallState caller, bool authorized)
@@ -271,8 +272,8 @@ internal static class NativeProgram
         result = session.SubmitField("gift-card", GiftTag, GiftValue, GiftCaller(), true);
         Check(result.PayoutAwarded == 0 && session.MoneyEarned == 7500, "same gift code is idempotent");
         result = session.SubmitField("credit-card", CardTag, CardValue, GiftCaller(), true);
-        Check(result.PayoutAwarded == 5000 && session.MoneyEarned == 12500 && observedMoney == 12500,
-            "same call credit5000 and gift7500 use separate agreed amounts");
+        Check(result.PayoutAwarded == 5200 && session.MoneyEarned == 12700 && observedMoney == 12700,
+            "same call credit base200 plus5000 and gift7500 use separate award rules");
         Check(card.reward == 200 && gift.reward == 200 && inputGift.reward == 200,
             "requested payouts leave both original catalog rewards unchanged");
 
@@ -295,7 +296,7 @@ internal static class NativeProgram
         var parallel = GiftSession(out card, out gift, out inputGift);
         ScamRecord(parallel, "gift-card", 1, 6000);
         result = parallel.SubmitField("gift-card", GiftTag, GiftValue, GiftCaller(), true);
-        Check(result.PayoutAwarded == 6000 && parallel.MoneyEarned == 6000 && session.MoneyEarned == 12500,
+        Check(result.PayoutAwarded == 6000 && parallel.MoneyEarned == 6000 && session.MoneyEarned == 12700,
             "separate call gift6000 cannot overwrite first call credit5000 and gift7500");
         var disabledGift = GiftSession(out card, out gift, out inputGift);
         ScamRecord(disabledGift, "gift-card", 1, 7500);
@@ -333,10 +334,10 @@ internal static class NativeProgram
         string first = giftFirst ? "gift-card" : "credit-card", second = giftFirst ? "credit-card" : "gift-card";
         ScamRecord(session, first, 1, 1500000000);
         var firstResult = session.SubmitField(first, giftFirst ? GiftTag : CardTag, giftFirst ? GiftValue : CardValue, GiftCaller(), true);
-        Check(firstResult.PayoutAwarded == 1500000000, first + " first safe large requested amount is paid");
+        Check(firstResult.PayoutAwarded == (giftFirst ? 1500000000 : 1500000200), first + " first safe large amount uses its credit/gift award rule");
         ScamRecord(session, second, 2, 1500000000);
         var secondResult = session.SubmitField(second, giftFirst ? CardTag : GiftTag, giftFirst ? CardValue : GiftValue, GiftCaller(), true);
-        Check(secondResult.PayoutAwarded == 200 && session.MoneyEarned == 1500000200,
+        Check(secondResult.PayoutAwarded == 200 && session.MoneyEarned == (giftFirst ? 1500000200 : 1500000400),
             first + " then " + second + " reserve already-paid custom reward and avoid native int overflow");
     }
 
@@ -389,12 +390,12 @@ internal static class NativeProgram
         };
     }
 
-    private static ConversationScamSession ActualCatalogSession()
+    private static ConversationScamSession ActualCatalogSession(int[] creditTiers = null)
     {
         // Public catalog metadata from the installed game, not the earlier simplified fixture:
         // actual product IDs, reward 400/200, number/code final goals and native prerequisites.
         var card = new ConversationScamDefinition {
-            id = "credit-card", appId = "credit-card", productId = "scam-credit-card", reward = 400,
+            id = "credit-card", appId = "credit-card", productId = "scam-credit-card", reward = 400, rewardTiers = creditTiers,
             objectives = new[] {
                 new ConversationScamObjective { id = "service" },
                 new ConversationScamObjective { id = "price", prerequisites = new[] { "service" } },
@@ -464,10 +465,11 @@ internal static class NativeProgram
                 var failure = ActualSubmit(session, scam, "wrong-code");
                 Check(failure.PayoutAwarded == 0 && session.MoneyEarned == 0, scam + " wrong code after 20000 offer pays nothing");
                 var result = ActualSubmit(session, scam);
-                Check(result.PayoutAwarded == 20000 && session.MoneyEarned == 20000 && changedMoney == 20000,
-                    scam + " actual native verified code pays stated 20000 with brief caller yes: " + offer);
+                int expectedAward = scam == "credit-card" ? 20400 : 20000;
+                Check(result.PayoutAwarded == expectedAward && session.MoneyEarned == expectedAward && changedMoney == expectedAward,
+                    scam + " actual verified code pays credit base400 plus20000 or gift requested20000: " + offer);
                 result = ActualSubmit(session, scam);
-                Check(result.PayoutAwarded == 0 && session.MoneyEarned == 20000,
+                Check(result.PayoutAwarded == 0 && session.MoneyEarned == expectedAward,
                     scam + " retry after explicit 20000 payout is idempotent");
                 session.Dispose();
             }
@@ -487,8 +489,8 @@ internal static class NativeProgram
             "newest observed credit offer wins over older out-of-order turn");
         Prices().Record(scoped, "credit-card", 1, 5000);
         var latest = ActualSubmit(scoped, "credit-card");
-        Check(latest.PayoutAwarded == 25000 && scoped.MoneyEarned == 25200,
-            "late AI-confirmed earlier amount cannot override latest explicit 25000 offer");
+        Check(latest.PayoutAwarded == 25400 && scoped.MoneyEarned == 25600,
+            "latest credit25000 plus base400 is paid once alongside prior gift original200");
         scoped.Dispose();
 
         var giftScoped = ActualCatalogSession();
@@ -570,7 +572,7 @@ internal static class NativeProgram
             Check(Prices().TryGet(session, "credit-card", out amount) && amount == 20000
                 && Prices().TryGet(session, "gift-card", out amount) && amount == 20000,
                 "immediate standalone answer to a caller price question records20000: " + answer);
-            Check(ActualSubmit(session, "credit-card").PayoutAwarded == 20000,
+            Check(ActualSubmit(session, "credit-card").PayoutAwarded == 20400,
                 "immediate price answer reaches native verified credit payout: " + answer);
             session.Dispose();
         }
@@ -647,7 +649,7 @@ internal static class NativeProgram
         var briefAcceptance = ActualOfferTurn("Die Hilfe läuft jetzt.", 2);
         briefAcceptance.CallerDialogue = "Ja, 20.000.";
         crossTurn.ObserveAsync(briefAcceptance).GetAwaiter().GetResult();
-        Check(ActualSubmit(crossTurn, "credit-card").PayoutAwarded == 20000,
+        Check(ActualSubmit(crossTurn, "credit-card").PayoutAwarded == 20400,
             "full player offer stays remembered across later bare caller acceptance");
         crossTurn.Dispose();
     }
@@ -657,9 +659,13 @@ internal static class NativeProgram
         var session = ActualCatalogSession();
         session.ObserveAsync(ActualOfferTurn("Der Service kostet 20000 Euro.", 1)).GetAwaiter().GetResult();
         session.Changed += () => Prices().RecordOffer(session, "credit-card", 2, 30000);
+        int reported = Plugin.Current.RequestedPayouts;
         var result = ActualSubmit(session, "credit-card");
-        Check(result.PayoutAwarded == 20000 && session.MoneyEarned == 20000,
-            "price change during native Changed event cannot split progress20000 from payout result30000");
+        Check(result.PayoutAwarded == 20400 && session.MoneyEarned == 20400,
+            "price change during native Changed event preserves complete credit award20400");
+        Check(Plugin.Current.RequestedPayouts == reported + 1 && Plugin.Current.LastStatus.Contains("20400")
+            && Plugin.Current.LastStatus.Contains("400") && Plugin.Current.LastStatus.Contains("20000"),
+            "credit status reports committed base400 plus20000 despite newer30000 offer in Changed");
         session.Dispose();
         foreach (bool clear in new[] { false, true })
         {
@@ -670,11 +676,80 @@ internal static class NativeProgram
                 else Plugin.Current.PayoutEnabled.Value = false;
             };
             result = ActualSubmit(session, "credit-card");
-            Check(result.PayoutAwarded == 20000 && session.MoneyEarned == 20000,
+            Check(result.PayoutAwarded == 20400 && session.MoneyEarned == 20400,
                 (clear ? "clearing quote book" : "disabling mod") + " during Changed preserves already-written native payout amount");
             Plugin.Current.PayoutEnabled.Value = true;
             session.Dispose();
         }
+    }
+
+    private static void TestCreditBaseAndRequestedAmount()
+    {
+        var small = ActualCatalogSession();
+        small.ObserveAsync(ActualOfferTurn("Der Kreditkarten-Service kostet 250 Euro.", 1)).GetAwaiter().GetResult();
+        int reported = Plugin.Current.RequestedPayouts;
+        var result = ActualSubmit(small, "credit-card");
+        Check(result.PayoutAwarded == 650 && small.MoneyEarned == 650,
+            "requested credit250 below native base400 yields exactly650");
+        Check(Plugin.Current.RequestedPayouts == reported + 1, "successful credit base-plus-request award increments payout count once");
+        result = ActualSubmit(small, "credit-card");
+        Check(result.PayoutAwarded == 0 && small.MoneyEarned == 650 && Plugin.Current.RequestedPayouts == reported + 1,
+            "credit retry does not pay base400 or request250 twice");
+        small.Dispose();
+
+        var smallGift = ActualCatalogSession();
+        smallGift.ObserveAsync(ActualOfferTurn("Der Geschenkkarten-Service kostet 250 Euro.", 1)).GetAwaiter().GetResult();
+        result = ActualSubmit(smallGift, "gift-card");
+        Check(result.PayoutAwarded == 250 && smallGift.MoneyEarned == 250,
+            "gift requested250 remains replacement and does not add native200");
+        smallGift.Dispose();
+
+        var original = ActualCatalogSession();
+        reported = Plugin.Current.RequestedPayouts;
+        result = ActualSubmit(original, "credit-card");
+        Check(result.PayoutAwarded == 400 && original.MoneyEarned == 400 && Plugin.Current.RequestedPayouts == reported,
+            "credit without requested amount pays original400 and does not report custom payout");
+        original.ObserveAsync(ActualOfferTurn("Der Kreditkarten-Service kostet 20000 Euro.", 1)).GetAwaiter().GetResult();
+        result = ActualSubmit(original, "credit-card");
+        Check(result.PayoutAwarded == 0 && original.MoneyEarned == 400,
+            "already-paid native credit400 cannot be paid again after a later request");
+        original.Dispose();
+
+        var tiered = ActualCatalogSession(new[] { 400, 800 });
+        tiered.ObserveAsync(ActualOfferTurn("Der Kreditkarten-Service kostet 20000 Euro.", 1)).GetAwaiter().GetResult();
+        result = ActualSubmit(tiered, "credit-card");
+        Check(result.PayoutAwarded == 20400 && tiered.MoneyEarned == 20400,
+            "credit reward-tier metadata does not add another base or highest tier");
+        tiered.Dispose();
+
+        var overflow = ActualCatalogSession();
+        overflow.ObserveAsync(ActualOfferTurn("Der Kreditkarten-Service kostet 2147483647 Euro.", 1)).GetAwaiter().GetResult();
+        reported = Plugin.Current.RequestedPayouts;
+        result = ActualSubmit(overflow, "credit-card");
+        Check(result.PayoutAwarded == 400 && overflow.MoneyEarned == 400 && Plugin.Current.RequestedPayouts == reported,
+            "overflow of credit base plus request retains original400 without custom payout count");
+        overflow.Dispose();
+
+        foreach (bool giftFirst in new[] { false, true })
+        {
+            var boundary = ActualCatalogSession();
+            boundary.ObserveAsync(ActualOfferTurn("Der Kreditkarten-Service kostet 1000 Euro.", 1)).GetAwaiter().GetResult();
+            boundary.ObserveAsync(ActualOfferTurn("Der Geschenkkarten-Service kostet 2147482247 Euro.", 2)).GetAwaiter().GetResult();
+            var first = ActualSubmit(boundary, giftFirst ? "gift-card" : "credit-card");
+            var second = ActualSubmit(boundary, giftFirst ? "credit-card" : "gift-card");
+            Check(first.PayoutAwarded == (giftFirst ? 2147482247 : 1400)
+                && second.PayoutAwarded == (giftFirst ? 1400 : 2147482247)
+                && boundary.MoneyEarned == int.MaxValue,
+                "safe shared integer boundary reserves credit base400 plus requested1000 in " + (giftFirst ? "gift-first" : "credit-first") + " order");
+            boundary.Dispose();
+        }
+        var overflowReserve = ActualCatalogSession();
+        overflowReserve.ObserveAsync(ActualOfferTurn("Der Kreditkarten-Service kostet 1000 Euro.", 1)).GetAwaiter().GetResult();
+        overflowReserve.ObserveAsync(ActualOfferTurn("Der Geschenkkarten-Service kostet 2147482647 Euro.", 2)).GetAwaiter().GetResult();
+        result = ActualSubmit(overflowReserve, "gift-card");
+        Check(result.PayoutAwarded == 200 && overflowReserve.MoneyEarned == 200,
+            "gift overflow reserve includes other credit original400 as well as requested1000");
+        overflowReserve.Dispose();
     }
 
     private static void TestQuoteEvidence()
