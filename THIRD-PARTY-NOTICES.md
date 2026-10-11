@@ -8,3 +8,5 @@ The source in this repository is licensed under MIT. Separately downloaded depen
 - The bridge uses ajv and ws, MIT. Their package license files remain in the bundled node_modules directory.
 
 Game assemblies are referenced only from the user's local installation and are not distributed. ElevenLabs is an external service; its terms and usage charges apply to the user's own account.
+
+TikTok Pocket uses the UnityWebBrowser/CEF runtime already included in the game; the mod does not redistribute that runtime. TikTok is an external website and handles its own videos, login and account data. The original TikTok Pocket phone/play icon is included under this repository's MIT license. This project is unaffiliated with TikTok.

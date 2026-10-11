@@ -9,6 +9,10 @@ payout-mod/bin/
 payout-mod/obj/
 payout-mod/test/bin/
 payout-mod/test/obj/
+tiktok-mod/bin/
+tiktok-mod/obj/
+tiktok-mod/test/bin/
+tiktok-mod/test/obj/
 dist/
 build/
 *.log

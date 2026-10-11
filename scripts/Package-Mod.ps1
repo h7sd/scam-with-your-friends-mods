@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([string]$ProjectDirectory = (Split-Path -Parent $PSScriptRoot), [string]$PackageDirectory, [string]$FileName = 'SWYF-Mods-1.2.0.zip')
+param([string]$ProjectDirectory = (Split-Path -Parent $PSScriptRoot), [string]$PackageDirectory, [string]$FileName = 'SWYF-Mods-1.3.0.zip')
 $ErrorActionPreference = 'Stop'
 $projectRoot = [IO.Path]::GetFullPath($ProjectDirectory)
 $packageRoot = if ($PackageDirectory) { [IO.Path]::GetFullPath($PackageDirectory) } else { Join-Path $projectRoot 'dist' }
@@ -23,7 +23,9 @@ finally { $archive.Dispose(); $stream.Dispose() }
 $verification = [IO.Compression.ZipFile]::OpenRead($zipPath)
 try {
     $names = @($verification.Entries | ForEach-Object FullName)
-    foreach ($required in @('Launcher/Setup/setup.ps1','Start-ElevenLabs.cmd','bridge/src/agents.js','BepInEx/plugins/ScamWYF.ElevenLabsAgents.dll')) {
+    foreach ($required in @('Launcher/Setup/setup.ps1','Start-ElevenLabs.cmd','bridge/src/agents.js','BepInEx/plugins/ScamWYF.ElevenLabsAgents.dll',
+        'BepInEx/plugins/ScamWYF.RequestedPayout.dll','BepInEx/plugins/ScamWYF.TikTokPocket.dll',
+        'BepInEx/plugins/TikTokPocket/tiktok-pocket.png','scripts/Install-TikTokMod.ps1','tiktok-mod/README.md')) {
         if ($names -notcontains $required) { throw "Package is incomplete: $required" }
     }
     if (@($names | Where-Object { $_.StartsWith('bridge/runtime/') -or $_.StartsWith('bridge/caller-profiles.json') -or ($_.StartsWith('bridge/.env') -and $_ -ne 'bridge/.env.example') }).Count) {

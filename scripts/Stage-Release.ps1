@@ -10,6 +10,8 @@ $files = [ordered]@{
     'BepInEx/plugins/ScamWYF.AiBackend.dll' = 'upstream/AI-Backend/bin/ScamWYF.AiBackend.dll'
     'BepInEx/plugins/ScamWYF.ElevenLabsAgents.dll' = 'mod/bin/ScamWYF.ElevenLabsAgents.dll'
     'BepInEx/plugins/ScamWYF.RequestedPayout.dll' = 'payout-mod/bin/ScamWYF.RequestedPayout.dll'
+    'BepInEx/plugins/ScamWYF.TikTokPocket.dll' = 'tiktok-mod/bin/ScamWYF.TikTokPocket.dll'
+    'BepInEx/plugins/TikTokPocket/tiktok-pocket.png' = 'tiktok-mod/assets/tiktok-pocket.png'
     'Licenses/AI-Backend.txt' = 'upstream/AI-Backend/LICENSE'
     'Licenses/Modding-Core.txt' = 'upstream/AI-Backend/vendor/ScamWYF.Modding.Core/LICENSE'
     'Licenses/Launcher.txt' = 'upstream/Launcher/LICENSE'
@@ -17,9 +19,10 @@ $files = [ordered]@{
     'LICENSE' = 'LICENSE'
     'THIRD-PARTY-NOTICES.md' = 'THIRD-PARTY-NOTICES.md'
     'payout-mod/README.md' = 'payout-mod/README.md'
+    'tiktok-mod/README.md' = 'tiktok-mod/README.md'
     'Start-ElevenLabs.cmd' = 'Start-ElevenLabs.cmd'
 }
-foreach ($name in @('Install-Mod.ps1','Install-PayoutMod.ps1','Game-Paths.ps1','Start-Backend.ps1','Start-Bridge.ps1')) {
+foreach ($name in @('Install-Mod.ps1','Install-PayoutMod.ps1','Install-TikTokMod.ps1','Game-Paths.ps1','Start-Backend.ps1','Start-Bridge.ps1')) {
     $files['scripts/' + $name] = 'scripts/' + $name
 }
 foreach ($relative in $files.Values) {
@@ -31,6 +34,8 @@ foreach ($entry in $files.GetEnumerator()) {
     [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($destination)) | Out-Null
     [IO.File]::Copy((Join-Path $root $entry.Value), $destination, $true)
 }
+$legacyPayoutReadme = Get-ScamChildPath $dist 'Wunschsumme-README.md'
+if (Test-Path -LiteralPath $legacyPayoutReadme -PathType Leaf) { Remove-Item -LiteralPath $legacyPayoutReadme }
 $bridgeRoot = Join-Path $root 'bridge'
 foreach ($file in Get-ChildItem -LiteralPath $bridgeRoot -File -Recurse -Force) {
     $relative = $file.FullName.Substring($bridgeRoot.Length + 1).Replace('\','/')
@@ -40,4 +45,4 @@ foreach ($file in Get-ChildItem -LiteralPath $bridgeRoot -File -Recurse -Force) 
     [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($destination)) | Out-Null
     [IO.File]::Copy($file.FullName, $destination, $true)
 }
-Write-Output 'Staged both mods and bridge. Private environment, caller profiles and runtime files were not copied.'
+Write-Output 'Staged the three mods and bridge. Private environment, browser profiles, caller profiles and runtime files were not copied.'

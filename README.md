@@ -4,6 +4,8 @@ This repository includes **ElevenLabs Agents 1.0.1**, **Requested Payout 1.2.0**
 
 For the complete setup, download and extract `SWYF-Mods-1.2.0.zip`. The smaller `Requested-Payout-SWYF-1.2.0.zip` package is also available for an existing game installation that already has BepInEx set up.
 
+The source also includes **TikTok Pocket 1.0.0**, a new Scamazon browser app in development. Its portrait window, original icon and separate local browser profile are implemented. The tested TikTok videos currently show a playback error in the game's embedded browser; it is not advertised as a working video player yet. See [TikTok Pocket's README](tiktok-mod/README.md) for the current limitations.
+
 ## ElevenLabs Agents
 
 A local BepInEx mod with a customized launcher. Speech recognition, conversation responses, and voice output use **ElevenLabs Agents**. Cursor is not used during gameplay.
@@ -58,10 +60,13 @@ npm test
 cd ..
 .\mod\build.ps1 -NoCopy
 .\payout-mod\build.ps1
+.\scripts\Create-TikTokIcon.ps1
+.\tiktok-mod\build.ps1
 .\scripts\Stage-Release.ps1
 .\scripts\Build-Launcher.ps1
-.\scripts\Package-Mod.ps1 -FileName SWYF-Mods-1.1.1.zip
+.\scripts\Package-Mod.ps1 -FileName SWYF-Mods-1.3.0.zip
 .\scripts\Package-PayoutMod.ps1
+.\scripts\Package-TikTokMod.ps1
 ```
 
 `scripts/Get-BuildDependencies.ps1` downloads the source dependencies listed below at pinned Git revisions into `upstream/`. Git, Node.js 22.13 or later, and the .NET 8 SDK are required. An optional portable compiler can be placed under `build/tools/dotnet`. Building the C# mods requires locally installed game assemblies and a configured BepInEx installation; game assemblies are not included. The launcher includes the official setup files and their license notices.

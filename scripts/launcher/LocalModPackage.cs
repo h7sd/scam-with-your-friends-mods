@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -14,12 +15,14 @@ namespace ScamWYF.Launcher
         {
             internal readonly string Marker, FileName, DisplayName, Tag, Summary, InstallScript, BackupFolder;
             internal readonly ModFile[] Files;
+            internal readonly string[] PluginAssets;
 
             internal PackageDefinition(string marker, string fileName, string displayName, string tag,
-                string summary, string installScript, string backupFolder, ModFile[] files)
+                string summary, string installScript, string backupFolder, ModFile[] files, string[] pluginAssets = null)
             {
                 Marker = marker; FileName = fileName; DisplayName = displayName; Tag = tag;
                 Summary = summary; InstallScript = installScript; BackupFolder = backupFolder; Files = files;
+                PluginAssets = pluginAssets ?? new string[0];
             }
         }
 
@@ -38,7 +41,14 @@ namespace ScamWYF.Launcher
                 "Install-PayoutMod.ps1", "BepInEx\\requested-payout-backups", new[] {
                     new ModFile("ScamWYF.RequestedPayout.dll", ModFolder.Plugins, true),
                     new ModFile("ScamWYF.Modding.Core.dll", ModFolder.Core, false)
-                })
+                }),
+            new PackageDefinition("local-package:tiktok-pocket", "TikTok-Pocket-1.0.0.zip",
+                "TikTok Pocket", "v1.0.0 (local)",
+                "Adds a purchasable TikTok app to Scamazon with its own icon and a portrait browser window.",
+                "Install-TikTokMod.ps1", "BepInEx\\tiktok-pocket-backups", new[] {
+                    new ModFile("ScamWYF.TikTokPocket.dll", ModFolder.Plugins, true),
+                    new ModFile("ScamWYF.Modding.Core.dll", ModFolder.Core, false)
+                }, new[] { "TikTokPocket/tiktok-pocket.png" })
         };
 
         internal static bool IsLocal(ReleaseInfo release)
@@ -87,6 +97,16 @@ namespace ScamWYF.Launcher
         internal static string BackupDescription(ReleaseInfo release)
         {
             return "Existing files will be backed up in " + Definition(release.Package).BackupFolder + ".";
+        }
+
+        internal static void DescribeAssets(InstallPlan plan, StringBuilder text)
+        {
+            if (!IsLocal(plan.Release)) return;
+            foreach (var relative in Definition(plan.Release.Package).PluginAssets)
+            {
+                text.AppendLine("  " + relative);
+                text.AppendLine("    -> BepInEx\\plugins\\" + relative.Replace('/', '\\'));
+            }
         }
 
         private static string Sha256(string path)
@@ -139,6 +159,7 @@ namespace ScamWYF.Launcher
                 File.Copy(step.SourcePath, destination, true);
                 written.Add(step.File.FileName);
             }
+            CopyPluginAssets(definition, plan, payload, written);
             var game = Path.GetDirectoryName(Path.GetDirectoryName(Path.GetDirectoryName(plan.Steps[0].DestinationPath)));
             var powershell = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe");
             var start = new ProcessStartInfo(powershell,
@@ -161,6 +182,42 @@ namespace ScamWYF.Launcher
                 if (process.ExitCode != 0) throw new IOException("Local installation failed. " + errors.ToString().Trim());
             }
             return written.ToArray();
+        }
+
+        private static void CopyPluginAssets(PackageDefinition definition, InstallPlan plan, string payload, List<string> written)
+        {
+            if (definition.PluginAssets.Length == 0) return;
+            var unpacked = Path.GetDirectoryName(plan.Steps[0].SourcePath);
+            var zip = Path.Combine(Path.GetDirectoryName(unpacked), definition.FileName);
+            if (!File.Exists(zip) || !string.Equals(Sha256(zip), plan.Release.Package.Sha256, StringComparison.OrdinalIgnoreCase))
+                throw new IOException("The bundled package changed after it was fetched. Nothing was installed.");
+            using (var archive = ZipFile.OpenRead(zip))
+            {
+                foreach (var relative in definition.PluginAssets)
+                {
+                    var source = ChildPath(unpacked, relative);
+                    var destination = ChildPath(Path.Combine(payload, "BepInEx", "plugins"), relative);
+                    var entry = archive.GetEntry(relative);
+                    if (entry == null || !File.Exists(source)) throw new IOException("The bundled package is missing " + relative + ".");
+                    string expected;
+                    using (var hash = SHA256.Create())
+                    using (var stream = entry.Open())
+                        expected = BitConverter.ToString(hash.ComputeHash(stream)).Replace("-", "").ToLowerInvariant();
+                    if (!string.Equals(expected, Sha256(source), StringComparison.OrdinalIgnoreCase))
+                        throw new IOException("The unpacked asset does not match the verified package: " + relative + ".");
+                    Directory.CreateDirectory(Path.GetDirectoryName(destination));
+                    File.Copy(source, destination, true);
+                    written.Add(relative);
+                }
+            }
+        }
+
+        private static string ChildPath(string root, string relative)
+        {
+            var prefix = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            var path = Path.GetFullPath(Path.Combine(prefix, relative));
+            if (!path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) throw new IOException("Invalid bundled asset path.");
+            return path;
         }
 
         private static string Quote(string value)

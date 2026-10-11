@@ -1,6 +1,6 @@
 <#
-Builds a separate launcher with bundled local ElevenLabs Agents and Requested Payout entries.
-The upstream checkout stays untouched. Build the AI DLLs into dist/BepInEx and the payout DLL first.
+Builds a separate launcher with bundled local ElevenLabs Agents, Requested Payout and TikTok Pocket entries.
+The upstream checkout stays untouched. Build and stage the DLLs and TikTok icon before building the launcher.
 Use -OutputDirectory to build a release beside the running launcher without replacing its executable.
 #>
 [CmdletBinding()]
@@ -102,8 +102,12 @@ Replace-LauncherSource 'src\ModInstaller.cs' @'
             var written = new List<string>();
 '@
 Replace-LauncherSource 'src\ModInstaller.cs' '            text.AppendLine("Files come from " + plan.Release.Package.Name + " on GitHub, " +' '            text.AppendLine("Files come from " + plan.Release.Package.Name + (LocalModPackage.IsLocal(plan.Release) ? " bundled with this launcher, " : " on GitHub, ") +'
-Replace-LauncherSource 'src\MainWindow.xaml.cs' 'Scam With Your Friends - modding ' 'Scam With Your Friends - ElevenLabs Agents + Requested Payout - Launcher '
-Replace-LauncherSource 'src\views\GetModsView.xaml' 'Mods are downloaded over https and checked against the SHA-256 GitHub publishes for them.' 'The ElevenLabs Agents and Requested Payout packages are bundled locally with this launcher. Other mods are downloaded over https and checked against the SHA-256 GitHub publishes for them.'
+Replace-LauncherSource 'src\ModInstaller.cs' '            text.AppendLine("Files come from "' @'
+            LocalModPackage.DescribeAssets(plan, text);
+            text.AppendLine("Files come from "
+'@
+Replace-LauncherSource 'src\MainWindow.xaml.cs' 'Scam With Your Friends - modding ' 'Scam With Your Friends - ElevenLabs Agents + Requested Payout + TikTok Pocket - Launcher '
+Replace-LauncherSource 'src\views\GetModsView.xaml' 'Mods are downloaded over https and checked against the SHA-256 GitHub publishes for them.' 'The ElevenLabs Agents, Requested Payout and TikTok Pocket packages are bundled locally with this launcher. Other mods are downloaded over https and checked against the SHA-256 GitHub publishes for them.'
 
 $packageFolder = Join-Path $output 'LocalPackages'
 [IO.Directory]::CreateDirectory($packageFolder) | Out-Null
@@ -112,15 +116,24 @@ $packages = @(
         (Join-Path $dist 'BepInEx\plugins\ScamWYF.ElevenLabsAgents.dll'),
         (Join-Path $dist 'BepInEx\plugins\ScamWYF.AiBackend.dll'),
         (Join-Path $dist 'BepInEx\core\ScamWYF.Modding.Core.dll')
-    ) },
+    ); Assets = @() },
     [pscustomobject]@{ Name = 'Requested-Payout-1.2.0.zip'; Files = @(
         [IO.Path]::GetFullPath($PayoutModPath),
         (Join-Path $dist 'BepInEx\core\ScamWYF.Modding.Core.dll')
+    ); Assets = @() },
+    [pscustomobject]@{ Name = 'TikTok-Pocket-1.0.0.zip'; Files = @(
+        (Join-Path $dist 'BepInEx\plugins\ScamWYF.TikTokPocket.dll'),
+        (Join-Path $dist 'BepInEx\core\ScamWYF.Modding.Core.dll')
+    ); Assets = @(
+        [pscustomobject]@{ Source = (Join-Path $dist 'BepInEx\plugins\TikTokPocket\tiktok-pocket.png'); Entry = 'TikTokPocket/tiktok-pocket.png' }
     ) }
 )
 foreach ($package in $packages) {
     foreach ($file in $package.Files) {
         if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "Build the mod first; missing $file" }
+    }
+    foreach ($asset in $package.Assets) {
+        if (-not (Test-Path -LiteralPath $asset.Source -PathType Leaf)) { throw "Stage the mod asset first; missing $($asset.Source)" }
     }
 }
 Add-Type -AssemblyName System.IO.Compression
@@ -133,13 +146,16 @@ foreach ($package in $packages) {
         foreach ($file in $package.Files) {
             [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $file, [IO.Path]::GetFileName($file), [IO.Compression.CompressionLevel]::Optimal) | Out-Null
         }
+        foreach ($asset in $package.Assets) {
+            [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $asset.Source, $asset.Entry, [IO.Compression.CompressionLevel]::Optimal) | Out-Null
+        }
     }
     finally { $archive.Dispose(); $zipStream.Dispose() }
 }
 
 $env:DOTNET_SKIP_FIRST_TIME_EXPERIENCE = '1'
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
-$buildArguments = @('build', (Join-Path $build 'Launcher.csproj'), '-c', 'Release', '-o', $output, '-p:Version=1.2.0', '-p:InformationalVersion=1.2.0-localmods')
+$buildArguments = @('build', (Join-Path $build 'Launcher.csproj'), '-c', 'Release', '-o', $output, '-p:Version=1.3.0', '-p:InformationalVersion=1.3.0-localmods')
 if ($NugetSource) { $buildArguments += @('--source', $NugetSource, '-p:NuGetAudit=false') }
 & $DotnetPath @buildArguments
 if ($LASTEXITCODE -ne 0) { throw 'The local launcher build failed.' }
@@ -149,7 +165,7 @@ Copy-Item -LiteralPath (Join-Path $upstream 'vendor\README.md') -Destination (Jo
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'licenses\Mono.Cecil-LICENSE.txt') -Destination (Join-Path $output 'Mono.Cecil-LICENSE.txt')
 $distScripts = Join-Path ([IO.Path]::GetDirectoryName($output)) 'scripts'
 [IO.Directory]::CreateDirectory($distScripts) | Out-Null
-foreach ($file in @('Install-Mod.ps1', 'Install-PayoutMod.ps1', 'Game-Paths.ps1', 'Start-Bridge.ps1', 'Start-Backend.ps1')) {
+foreach ($file in @('Install-Mod.ps1', 'Install-PayoutMod.ps1', 'Install-TikTokMod.ps1', 'Game-Paths.ps1', 'Start-Bridge.ps1', 'Start-Backend.ps1')) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot $file) -Destination (Join-Path $distScripts $file) -Force
 }
 Write-Output "Built local launcher: $(Join-Path $output 'ScamWYF.Launcher.exe')"
