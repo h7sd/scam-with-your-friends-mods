@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "mods": [
+    {
+      "owner": "h7sd",
+      "repo": "ElevenLabs-Agents",
+      "displayName": "ElevenLabs Agents",
+      "summary": "Uses a local ElevenLabs Agents bridge for caller speech, microphone recognition and AI responses, with character-specific voices and language controls.",
+      "files": [
+        { "fileName": "ScamWYF.ElevenLabsAgents.dll", "folder": "plugins", "expectsPluginAttribute": true },
+        { "fileName": "ScamWYF.AiBackend.dll", "folder": "plugins", "expectsPluginAttribute": true },
+        { "fileName": "ScamWYF.Modding.Core.dll", "folder": "core", "expectsPluginAttribute": false }
+      ],
+      "postInstall": [
+        {
+          "script": "setup-elevenlabs-agents.ps1",
+          "description": "Downloads and installs the local ElevenLabs bridge and opens its setup page. Requires Node.js 22.13 or newer. Skipping leaves speech and AI unavailable until you set up and start the bridge yourself."
+        }
+      ]
+    },
+    {
+      "owner": "h7sd",
+      "repo": "Requested-Payout",
+      "displayName": "Requested Payout",
+      "summary": "Remembers the price stated during a call. Successful credit-card scams add it to the original reward; gift-card scams pay that price after the correct fictional code is verified. In multiplayer, install on the host.",
+      "files": [
+        { "fileName": "ScamWYF.RequestedPayout.dll", "folder": "plugins", "expectsPluginAttribute": true },
+        { "fileName": "ScamWYF.Modding.Core.dll", "folder": "core", "expectsPluginAttribute": false }
+      ],
+      "postInstall": [
+        {
+          "script": "post-install-requested-payout.ps1",
+          "description": "Checks the installed mod and displays its payout rules and multiplayer host instructions. Skipping does not affect the mod; no additional setup or downloads are required."
+        }
+      ]
+    },
+    {
+      "owner": "h7sd",
+      "repo": "TikTok-Pocket",
+      "displayName": "TikTok Pocket",
+      "summary": "Adds a purchasable portrait TikTok app to Scamazon, with its own icon, hidden address bar and a separate local WebView2 browser session. Requires Microsoft Edge WebView2 Runtime.",
+      "files": [
+        { "fileName": "ScamWYF.TikTokPocket.dll", "folder": "plugins", "expectsPluginAttribute": true },
+        { "fileName": "ScamWYF.Modding.Core.dll", "folder": "core", "expectsPluginAttribute": false }
+      ],
+      "postInstall": [
+        {
+          "script": "setup-tiktok-pocket.ps1",
+          "description": "Downloads and installs TikTok Pocket's icon and local video browser. Requires Microsoft Edge WebView2 Runtime. Skipping leaves the DLL installed, but the TikTok app cannot open until these files are installed."
+        }
+      ]
+    }
+  ]
+}

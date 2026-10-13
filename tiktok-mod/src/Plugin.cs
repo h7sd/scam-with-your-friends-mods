@@ -8,7 +8,7 @@ using UnityEngine.UIElements;
 
 namespace ScamWYF.TikTokPocket
 {
-    [BepInPlugin(PluginGuid,"TikTok Pocket","1.0.0")]
+    [BepInPlugin(PluginGuid,"TikTok Pocket","1.0.1")]
     public sealed class Plugin : ScamMod
     {
         public const string PluginGuid="com.community.scamwyf.tiktokpocket";
@@ -19,7 +19,7 @@ namespace ScamWYF.TikTokPocket
         internal int ShopPrice;
         internal string Status="Buy TikTok Pocket in Scamazon's Games & Software shop.";
         internal string IconPath {get {return Path.Combine(Path.GetDirectoryName(Info.Location),"TikTokPocket","tiktok-pocket.png");}}
-        internal string ProfilePath {get {return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"ScamWYF-Mods","TikTokPocket",RememberSession.Value?"Profile":"Guest");}}
+        internal string WorkerPath {get {return Path.Combine(Path.GetDirectoryName(Info.Location),"TikTokPocket","BrowserWorker","ScamWYF.TikTokBrowser.exe");}}
         protected override void OnModLoad()
         {
             Current=this;
@@ -53,7 +53,7 @@ namespace ScamWYF.TikTokPocket
             var compatibility=new Button(BrowserHooks.CheckVideoCompatibility){text="Check video compatibility"};page.Add(compatibility);
             var guest=new Toggle("Private browsing (do not remember sign-in)"){value=!RememberSession.Value};
             guest.RegisterValueChangedCallback(evt=>{RememberSession.Value=!evt.newValue;BrowserHooks.ResetSessions();});page.Add(guest);
-            Widgets.Note(page,"Browser sessions stay on this PC. Private browsing keeps sign-in temporary. TikTok may ask you to sign in again. Website availability and video playback depend on TikTok and the browser shipped with the game.");
+            Widgets.Note(page,"Browser sessions stay on this PC. Private browsing keeps sign-in temporary. TikTok may ask you to sign in again. The video browser requires Microsoft Edge WebView2 Runtime and uses no mod server.");
             ConfigEditor.Build(page);
         }
     }

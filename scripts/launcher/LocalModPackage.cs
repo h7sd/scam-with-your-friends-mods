@@ -5,6 +5,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
+using System.Web.Script.Serialization;
 
 namespace ScamWYF.Launcher
 {
@@ -16,13 +17,18 @@ namespace ScamWYF.Launcher
             internal readonly string Marker, FileName, DisplayName, Tag, Summary, InstallScript, BackupFolder;
             internal readonly ModFile[] Files;
             internal readonly string[] PluginAssets;
+            internal readonly string[] WorkerFiles;
+            internal readonly string WorkerManifestSha256;
 
             internal PackageDefinition(string marker, string fileName, string displayName, string tag,
-                string summary, string installScript, string backupFolder, ModFile[] files, string[] pluginAssets = null)
+                string summary, string installScript, string backupFolder, ModFile[] files, string[] pluginAssets = null,
+                string[] workerFiles = null, string workerManifestSha256 = null)
             {
                 Marker = marker; FileName = fileName; DisplayName = displayName; Tag = tag;
                 Summary = summary; InstallScript = installScript; BackupFolder = backupFolder; Files = files;
                 PluginAssets = pluginAssets ?? new string[0];
+                WorkerFiles = workerFiles ?? new string[0];
+                WorkerManifestSha256 = workerManifestSha256;
             }
         }
 
@@ -42,13 +48,32 @@ namespace ScamWYF.Launcher
                     new ModFile("ScamWYF.RequestedPayout.dll", ModFolder.Plugins, true),
                     new ModFile("ScamWYF.Modding.Core.dll", ModFolder.Core, false)
                 }),
-            new PackageDefinition("local-package:tiktok-pocket", "TikTok-Pocket-1.0.0.zip",
-                "TikTok Pocket", "v1.0.0 (local)",
+            new PackageDefinition("local-package:tiktok-pocket", "TikTok-Pocket-1.0.1.zip",
+                "TikTok Pocket", "v1.0.1 (local)",
                 "Adds a purchasable TikTok app to Scamazon with its own icon and a portrait browser window.",
                 "Install-TikTokMod.ps1", "BepInEx\\tiktok-pocket-backups", new[] {
                     new ModFile("ScamWYF.TikTokPocket.dll", ModFolder.Plugins, true),
                     new ModFile("ScamWYF.Modding.Core.dll", ModFolder.Core, false)
-                }, new[] { "TikTokPocket/tiktok-pocket.png" })
+                }, new[] { "TikTokPocket/tiktok-pocket.png" }, new[] {
+                    "ScamWYF.TikTokBrowser.exe",
+                    "Licenses/CsWinRT-LICENSE.txt",
+                    "Licenses/DEPENDENCIES.md",
+                    "Licenses/DotNet-LICENSE.txt",
+                    "Licenses/DotNet-ThirdPartyNotices.txt",
+                    "Licenses/DotNet-WindowsDesktop-LICENSE.txt",
+                    "Licenses/Microsoft-WebView2-LICENSE.txt",
+                    "Licenses/Microsoft-WebView2-NOTICE.txt",
+                    "Licenses/SharpGen-LICENSE.txt",
+                    "Licenses/System-IO-Pipelines-LICENSE.txt",
+                    "Licenses/System-IO-Pipelines-NOTICES.txt",
+                    "Licenses/System-Text-Encodings-Web-LICENSE.txt",
+                    "Licenses/System-Text-Encodings-Web-NOTICES.txt",
+                    "Licenses/System-Text-Json-LICENSE.txt",
+                    "Licenses/System-Text-Json-NOTICES.txt",
+                    "Licenses/Vortice-Mathematics-LICENSE.txt",
+                    "Licenses/Vortice-Windows-LICENSE.txt",
+                    "Licenses/Windows-SDK-LICENSE.txt"
+                }, "__TIKTOK_WORKER_MANIFEST_SHA256__")
         };
 
         internal static bool IsLocal(ReleaseInfo release)
@@ -102,10 +127,17 @@ namespace ScamWYF.Launcher
         internal static void DescribeAssets(InstallPlan plan, StringBuilder text)
         {
             if (!IsLocal(plan.Release)) return;
-            foreach (var relative in Definition(plan.Release.Package).PluginAssets)
+            var definition = Definition(plan.Release.Package);
+            foreach (var relative in definition.PluginAssets)
             {
                 text.AppendLine("  " + relative);
                 text.AppendLine("    -> BepInEx\\plugins\\" + relative.Replace('/', '\\'));
+            }
+            if (definition.WorkerFiles.Length != 0)
+            {
+                text.AppendLine("Includes a bundled Microsoft Edge WebView2 helper for the in-game browser.");
+                text.AppendLine("  ScamWYF.TikTokBrowser.exe, worker-files.json and " + (definition.WorkerFiles.Length - 1) + " license files");
+                text.AppendLine("    -> BepInEx\\plugins\\TikTokPocket\\BrowserWorker");
             }
         }
 
@@ -130,6 +162,7 @@ namespace ScamWYF.Launcher
                 var actual = Sha256(copied);
                 if (!string.Equals(actual, asset.Sha256, StringComparison.OrdinalIgnoreCase))
                     throw new IOException("The bundled package changed since it was listed. Check for updates again.");
+                ValidateArchiveEntries(definition, copied);
                 var unpacked = Path.Combine(folder, "unpacked");
                 Directory.CreateDirectory(unpacked);
                 ModInstaller.Unpack(copied, unpacked);
@@ -186,30 +219,120 @@ namespace ScamWYF.Launcher
 
         private static void CopyPluginAssets(PackageDefinition definition, InstallPlan plan, string payload, List<string> written)
         {
-            if (definition.PluginAssets.Length == 0) return;
+            if (definition.PluginAssets.Length == 0 && definition.WorkerFiles.Length == 0) return;
             var unpacked = Path.GetDirectoryName(plan.Steps[0].SourcePath);
             var zip = Path.Combine(Path.GetDirectoryName(unpacked), definition.FileName);
             if (!File.Exists(zip) || !string.Equals(Sha256(zip), plan.Release.Package.Sha256, StringComparison.OrdinalIgnoreCase))
                 throw new IOException("The bundled package changed after it was fetched. Nothing was installed.");
+            ValidateArchiveEntries(definition, zip);
             using (var archive = ZipFile.OpenRead(zip))
             {
-                foreach (var relative in definition.PluginAssets)
+                var assets = AssetPaths(definition);
+                var manifest = ReadWorkerManifest(definition, archive, unpacked);
+                foreach (var relative in assets)
+                {
+                    var source = ChildPath(unpacked, relative);
+                    var actual = VerifyAsset(archive, unpacked, relative);
+                    WorkerFile expected;
+                    if (manifest.TryGetValue(relative, out expected) &&
+                        (new FileInfo(source).Length != expected.Size || !string.Equals(actual, expected.Sha256, StringComparison.Ordinal)))
+                        throw new IOException("The browser helper file does not match its manifest: " + relative + ".");
+                }
+                foreach (var relative in assets)
                 {
                     var source = ChildPath(unpacked, relative);
                     var destination = ChildPath(Path.Combine(payload, "BepInEx", "plugins"), relative);
-                    var entry = archive.GetEntry(relative);
-                    if (entry == null || !File.Exists(source)) throw new IOException("The bundled package is missing " + relative + ".");
-                    string expected;
-                    using (var hash = SHA256.Create())
-                    using (var stream = entry.Open())
-                        expected = BitConverter.ToString(hash.ComputeHash(stream)).Replace("-", "").ToLowerInvariant();
-                    if (!string.Equals(expected, Sha256(source), StringComparison.OrdinalIgnoreCase))
-                        throw new IOException("The unpacked asset does not match the verified package: " + relative + ".");
                     Directory.CreateDirectory(Path.GetDirectoryName(destination));
                     File.Copy(source, destination, true);
                     written.Add(relative);
                 }
             }
+        }
+
+        private const string WorkerPrefix = "TikTokPocket/BrowserWorker/";
+        private const string WorkerManifest = WorkerPrefix + "worker-files.json";
+        private sealed class WorkerFile { internal long Size; internal string Sha256; }
+
+        private static void ValidateArchiveEntries(PackageDefinition definition, string zip)
+        {
+            if (definition.WorkerFiles.Length == 0) return;
+            var allowed = new HashSet<string>(AssetPaths(definition), StringComparer.Ordinal);
+            foreach (var file in definition.Files) allowed.Add(file.FileName);
+            var found = new HashSet<string>(StringComparer.Ordinal);
+            using (var archive = ZipFile.OpenRead(zip))
+            {
+                foreach (var entry in archive.Entries)
+                    if (!allowed.Contains(entry.FullName) || !found.Add(entry.FullName))
+                        throw new IOException("The bundled browser package contains an unexpected file: " + entry.FullName + ".");
+            }
+            if (found.Count != allowed.Count) throw new IOException("The bundled browser package is missing a required file.");
+        }
+
+        private static List<string> AssetPaths(PackageDefinition definition)
+        {
+            var paths = new List<string>(definition.PluginAssets);
+            if (definition.WorkerFiles.Length != 0)
+            {
+                paths.Add(WorkerManifest);
+                foreach (var file in definition.WorkerFiles) paths.Add(WorkerPrefix + file);
+            }
+            return paths;
+        }
+
+        private static string VerifyAsset(ZipArchive archive, string unpacked, string relative)
+        {
+            var source = ChildPath(unpacked, relative);
+            var entry = archive.GetEntry(relative);
+            if (entry == null || !File.Exists(source)) throw new IOException("The bundled package is missing " + relative + ".");
+            string expected;
+            using (var hash = SHA256.Create())
+            using (var stream = entry.Open())
+                expected = BitConverter.ToString(hash.ComputeHash(stream)).Replace("-", "").ToLowerInvariant();
+            var actual = Sha256(source);
+            if (!string.Equals(expected, actual, StringComparison.Ordinal))
+                throw new IOException("The unpacked asset does not match the verified package: " + relative + ".");
+            return actual;
+        }
+
+        private static Dictionary<string, WorkerFile> ReadWorkerManifest(PackageDefinition definition, ZipArchive archive, string unpacked)
+        {
+            var found = new Dictionary<string, WorkerFile>(StringComparer.Ordinal);
+            if (definition.WorkerFiles.Length == 0) return found;
+            var manifestHash = VerifyAsset(archive, unpacked, WorkerManifest);
+            if (!string.Equals(manifestHash, definition.WorkerManifestSha256, StringComparison.Ordinal))
+                throw new IOException("The browser helper manifest differs from the approved package.");
+            var path = ChildPath(unpacked, WorkerManifest);
+            if (new FileInfo(path).Length > 131072) throw new IOException("The browser helper manifest is too large.");
+            Dictionary<string, object> root;
+            try { root = new JavaScriptSerializer { MaxJsonLength = 131072 }.DeserializeObject(File.ReadAllText(path)) as Dictionary<string, object>; }
+            catch (ArgumentException ex) { throw new IOException("The browser helper manifest could not be read.", ex); }
+            object version, appVersion, executable, rawFiles;
+            if (root == null || root.Count != 4 || !root.TryGetValue("schemaVersion", out version) || !(version is int) || (int)version != 1 ||
+                !root.TryGetValue("appVersion", out appVersion) || !string.Equals(appVersion as string, "1.0.1", StringComparison.Ordinal) ||
+                !root.TryGetValue("executable", out executable) || !string.Equals(executable as string, "ScamWYF.TikTokBrowser.exe", StringComparison.Ordinal) ||
+                !root.TryGetValue("files", out rawFiles) || !(rawFiles is object[]))
+                throw new IOException("Invalid browser helper manifest format or version.");
+            var allowed = new HashSet<string>(definition.WorkerFiles, StringComparer.Ordinal);
+            long totalSize = 0;
+            foreach (var raw in (object[])rawFiles)
+            {
+                var file = raw as Dictionary<string, object>;
+                object rawPath, rawSize, rawSha;
+                if (file == null || file.Count != 3 || !file.TryGetValue("path", out rawPath) || !file.TryGetValue("size", out rawSize) ||
+                    !file.TryGetValue("sha256", out rawSha) || !(rawPath is string) || !(rawSize is int || rawSize is long) ||
+                    !allowed.Contains((string)rawPath) || found.ContainsKey(WorkerPrefix + (string)rawPath))
+                    throw new IOException("The browser helper manifest contains an unexpected file.");
+                var sha = rawSha as string;
+                var size = Convert.ToInt64(rawSize);
+                if (size <= 0 || size > 268435456 || sha == null || sha.Length != 64) throw new IOException("Invalid browser helper file size or digest.");
+                totalSize += size;
+                if (totalSize > 268435456) throw new IOException("The browser helper payload is too large.");
+                foreach (var c in sha) if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')))
+                    throw new IOException("Invalid browser helper digest.");
+                found.Add(WorkerPrefix + (string)rawPath, new WorkerFile { Size = size, Sha256 = sha });
+            }
+            if (found.Count != allowed.Count) throw new IOException("The browser helper manifest is missing a required file.");
+            return found;
         }
 
         private static string ChildPath(string root, string relative)

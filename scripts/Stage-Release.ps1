@@ -3,6 +3,7 @@
 param([string]$ProjectDirectory = (Split-Path -Parent $PSScriptRoot))
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Game-Paths.ps1')
+. (Join-Path $PSScriptRoot 'TikTok-WorkerPackage.ps1')
 $root = [IO.Path]::GetFullPath($ProjectDirectory)
 $dist = Join-Path $root 'dist'
 $files = [ordered]@{
@@ -22,8 +23,13 @@ $files = [ordered]@{
     'tiktok-mod/README.md' = 'tiktok-mod/README.md'
     'Start-ElevenLabs.cmd' = 'Start-ElevenLabs.cmd'
 }
-foreach ($name in @('Install-Mod.ps1','Install-PayoutMod.ps1','Install-TikTokMod.ps1','Game-Paths.ps1','Start-Backend.ps1','Start-Bridge.ps1')) {
+foreach ($name in @('Install-Mod.ps1','Install-PayoutMod.ps1','Install-TikTokMod.ps1','TikTok-WorkerPackage.ps1','Game-Paths.ps1','Start-Backend.ps1','Start-Bridge.ps1')) {
     $files['scripts/' + $name] = 'scripts/' + $name
+}
+$workerSource = Get-TikTokWorkerPackage -WorkerRoot (Join-Path $root 'webview-worker/publish') -Version '1.0.1'
+$files['BepInEx/plugins/TikTokPocket/BrowserWorker/worker-files.json'] = 'webview-worker/publish/worker-files.json'
+foreach ($workerFile in $workerSource.Files) {
+    $files['BepInEx/plugins/TikTokPocket/BrowserWorker/'+$workerFile.Path] = 'webview-worker/publish/'+$workerFile.Path
 }
 foreach ($relative in $files.Values) {
     if (-not (Test-Path -LiteralPath (Join-Path $root $relative) -PathType Leaf)) { throw "Build input missing: $relative" }
@@ -31,6 +37,7 @@ foreach ($relative in $files.Values) {
 if (-not (Test-Path -LiteralPath (Join-Path $root 'bridge/node_modules/ws/package.json'))) { throw 'Run npm ci in bridge before staging the release.' }
 foreach ($entry in $files.GetEnumerator()) {
     $destination = Get-ScamChildPath $dist $entry.Key
+    Assert-TikTokWorkerPath -Root $dist -Path $destination
     [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($destination)) | Out-Null
     [IO.File]::Copy((Join-Path $root $entry.Value), $destination, $true)
 }

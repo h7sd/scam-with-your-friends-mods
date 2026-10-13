@@ -10,16 +10,11 @@ using HarmonyLib;
 using Kolkata.UI;
 using ScamWYF.TikTokPocket;
 using UnityEngine;
-using VoltstroStudios.UnityWebBrowser.Core;
-using VoltstroStudios.UnityWebBrowser.Logging;
-using VoltstroStudios.UnityWebBrowser.Shared;
 
 internal static class NativeProgram
 {
     private static string gameDirectory, jsonAssembly, taskDirectory;
     private static int passed, failed;
-    private static Exception profileFailure;
-    private static bool profileFailureReported;
     private static readonly Dictionary<string,int> preferences = new Dictionary<string,int>();
 
     private static int Main(string[] args)
@@ -46,11 +41,10 @@ internal static class NativeProgram
     {
         Plugin.Current = new Plugin {
             IconPath = Path.Combine(taskDirectory, "tiktok-mod", "assets", "tiktok-pocket.png"),
-            ProfilePath = Path.Combine(taskDirectory, "build", "tiktok-tests", "profiles", Guid.NewGuid().ToString("N")),
         };
         CatalogHooks.Install(Plugin.Current);
         TestNativeCatalogAndAccess();
-        TestProfileInitialization();
+        WorkerAdapterTests.Run(Check,taskDirectory);
         Console.WriteLine("TikTok native tests: " + passed + " passed, " + failed + " failed");
         return failed == 0 ? 0 : 1;
     }
@@ -172,96 +166,6 @@ internal static class NativeProgram
             while(cause.InnerException != null) cause = cause.InnerException;
             if(!(cause is System.Security.SecurityException) && !(cause is TypeLoadException)) throw;
             Console.WriteLine("SKIP: native purchase/access execution needs Unity engine calls unavailable in Windows CLR4 (" + cause.GetType().Name + "). No real PlayerPrefs were accessed.");
-        }
-    }
-    private static void TestProfileInitialization()
-    {
-        try
-        {
-            // Copy the production prefix, adapting only Unity object's engine-backed null
-            // comparison to a managed storage-holder comparison. Never invoke browser Init.
-            Harmony.ReversePatch(AccessTools.Method(typeof(BrowserHooks),"InitPrefix"),
-                new HarmonyMethod(typeof(NativeProgram),"ProfileInitCopy"),
-                AccessTools.Method(typeof(NativeProgram),"ManagedHostComparison"),null);
-            Type hostType = NativeApi.Type("KolkataOsBrowserHost");
-            object host = FormatterServices.GetUninitializedObject(hostType);
-            var ownedClient = (WebBrowserClient)FormatterServices.GetUninitializedObject(typeof(WebBrowserClient));
-            var foreignClient = (WebBrowserClient)FormatterServices.GetUninitializedObject(typeof(WebBrowserClient));
-            GC.SuppressFinalize(ownedClient); GC.SuppressFinalize(foreignClient);
-            FieldInfo browserClient = NativeApi.Field(hostType,"browserClient");
-            FieldInfo profile = AccessTools.Field(typeof(WebBrowserClient),"cachePath");
-            browserClient.SetValue(host,ownedClient);
-            AccessTools.Field(typeof(BrowserHooks),"client").SetValue(null,browserClient);
-            AccessTools.Field(typeof(BrowserHooks),"cachePath").SetValue(null,profile);
-            AccessTools.Field(typeof(BrowserHooks),"fail").SetValue(null,AccessTools.Method(typeof(NativeProgram),"ReportProfileFailure"));
-            Type sessionType = typeof(BrowserHooks).GetNestedType("Session",BindingFlags.NonPublic);
-            object session = Activator.CreateInstance(sessionType,true);
-            AccessTools.Field(sessionType,"Host").SetValue(session,host);
-            var sessions = (IList)AccessTools.Field(typeof(BrowserHooks),"sessions").GetValue(null);
-            sessions.Add(session);
-            ownedClient.enableAudioForwarding=true; ownedClient.remoteDebugging=true;
-            ownedClient.remoteDebuggingPort=9222; ownedClient.ignoreSslErrors=true;
-            foreignClient.remoteDebugging=true; foreignClient.ignoreSslErrors=true;
-            foreignClient.enableAudioForwarding=true;
-            Plugin.Current.RememberSession.Value=true;
-            bool allowed=ProfileInitCopy(ownedClient);
-            if(!allowed && profileFailure==null) throw new InvalidOperationException("Owned profile failed before the instrumented native logger call.");
-            if(allowed) Check(true, "production profile prefix accepts its exact owned browser client");
-            else
-            {
-                Exception cause=profileFailure;
-                while(cause.InnerException!=null) cause=cause.InnerException;
-                if(!(cause is System.Security.SecurityException) && !(cause is TypeLoadException)) throw profileFailure;
-                Check(profileFailureReported,"production prefix rejects Init and reports preparation failure when native initialization is unavailable");
-                Console.WriteLine("SKIP: owned client logger/native initialization requires Unity profiler calls ("+cause.GetType().Name+"). Earlier privacy settings are checked; no browser process was started.");
-            }
-            Check(((FileInfo)profile.GetValue(ownedClient)).FullName == Path.GetFullPath(Plugin.Current.ProfilePath)
-                && Directory.Exists(Plugin.Current.ProfilePath), "owned client profile is assigned before Init in a test-only isolated directory");
-            Check(!ownedClient.incognitoMode && ownedClient.localStorage, "remembered session uses persistent local storage mode");
-            Check(!ownedClient.enableAudioForwarding, "owned TikTok audio is not forwarded to multiplayer");
-            Check(!ownedClient.remoteDebugging && ownedClient.remoteDebuggingPort==0
-                && ownedClient.remoteDebuggingAllowedOrigins.Length==0, "owned profile disables remote debugging and allowed origins");
-            Check(!ownedClient.ignoreSslErrors && ownedClient.ignoreSslErrorsDomains.Length==0,
-                "owned profile enforces TLS validation");
-            if(allowed) Check(ownedClient.logSeverity==LogSeverity.Fatal && ownedClient.processLogHandler==null,
-                "owned profile suppresses process logging metadata");
-            Check(ProfileInitCopy(foreignClient) && profile.GetValue(foreignClient)==null && foreignClient.remoteDebugging
-                && foreignClient.ignoreSslErrors && foreignClient.enableAudioForwarding,
-                "foreign regular browser client profile and settings are untouched");
-            Plugin.Current.RememberSession.Value=false;
-            ProfileInitCopy(ownedClient);
-            Check(ownedClient.incognitoMode,
-                "private browsing is assigned to the exact owned client before initialization");
-            sessions.Clear();
-        }
-        catch(Exception ex)
-        {
-            Exception cause=ex;
-            while(cause.InnerException!=null) cause=cause.InnerException;
-            if(!(cause is System.Security.SecurityException) && !(cause is TypeLoadException)) throw;
-            Console.WriteLine("SKIP: exact-owned browser profile execution is unavailable outside Unity ("+cause.GetType().Name+": "+cause.Message+"). No browser process or account/profile was opened.");
-        }
-    }
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    private static bool ProfileInitCopy(WebBrowserClient client) {throw new NotImplementedException("Reverse patch stand-in");}
-    private static void ReportProfileFailure(string message,bool stop) {profileFailureReported=true;}
-    private static void SetLoggerMeasured(WebBrowserClient client,IWebBrowserLogger logger)
-    {
-        try {client.Logger=logger;}
-        catch(Exception ex) {profileFailure=ex;throw;}
-    }
-    private static bool ManagedNotEqual(UnityEngine.Object left,UnityEngine.Object right) {return !ReferenceEquals(left,right);}
-    private static IEnumerable<CodeInstruction> ManagedHostComparison(IEnumerable<CodeInstruction> instructions)
-    {
-        MethodInfo comparison=AccessTools.Method(typeof(UnityEngine.Object),"op_Inequality");
-        MethodInfo logger=AccessTools.PropertySetter(typeof(WebBrowserClient),"Logger");
-        foreach(var instruction in instructions)
-        {
-            if(instruction.opcode==OpCodes.Call && Equals(instruction.operand,comparison))
-                yield return new CodeInstruction(OpCodes.Call,AccessTools.Method(typeof(NativeProgram),"ManagedNotEqual"));
-            else if((instruction.opcode==OpCodes.Call || instruction.opcode==OpCodes.Callvirt) && Equals(instruction.operand,logger))
-                yield return new CodeInstruction(OpCodes.Call,AccessTools.Method(typeof(NativeProgram),"SetLoggerMeasured"));
-            else yield return instruction;
         }
     }
     private static int PrefsGet(string key, int defaultValue)

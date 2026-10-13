@@ -13,6 +13,9 @@ tiktok-mod/bin/
 tiktok-mod/obj/
 tiktok-mod/test/bin/
 tiktok-mod/test/obj/
+webview-worker/bin/
+webview-worker/obj/
+webview-worker/publish/
 dist/
 build/
 *.log

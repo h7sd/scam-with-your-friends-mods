@@ -1,10 +1,10 @@
 # Community Mods for Scam With Your Friends
 
-This repository includes **ElevenLabs Agents 1.0.1**, **Requested Payout 1.2.0** for credit card and gift card scams, and a customized Windows launcher with entries for both mods. Ready-to-use packages are available under [Releases](https://github.com/h7sd/scam-with-your-friends-mods/releases).
+This source repository includes **ElevenLabs Agents 1.0.1**, **Requested Payout 1.2.0** for credit card and gift card scams, and **TikTok Pocket 1.0.1**. Each mod now has its own small ZIP and release repository for the standard ScamWYF launcher. See [stock launcher packages and catalogue entries](catalogue/README.md).
 
-For the complete setup, download and extract `SWYF-Mods-1.2.0.zip`. The smaller `Requested-Payout-SWYF-1.2.0.zip` package is also available for an existing game installation that already has BepInEx set up.
+Download [ElevenLabs Agents](https://github.com/h7sd/ElevenLabs-Agents/releases/latest), [Requested Payout](https://github.com/h7sd/Requested-Payout/releases/latest), or [TikTok Pocket](https://github.com/h7sd/TikTok-Pocket/releases/latest). Each latest release contains exactly one mod ZIP with bare DLL names and an optional post-install script at its root. Bridge and browser files are downloaded separately by the setup steps; browser profiles, keys and configuration are never packaged.
 
-The source also includes **TikTok Pocket 1.0.0**, a new Scamazon browser app in development. Its portrait window, original icon and separate local browser profile are implemented. The tested TikTok videos currently show a playback error in the game's embedded browser; it is not advertised as a working video player yet. See [TikTok Pocket's README](tiktok-mod/README.md) for the current limitations.
+**TikTok Pocket** adds the official TikTok website to Scamazon as a purchasable app, with a portrait window, an original icon and a separate local browser profile. Version **1.0.1** replaces its original browser renderer with Microsoft Edge WebView2 to support video playback. The address bar is hidden; **Back** and **Refresh** remain available. See [TikTok Pocket's README](tiktok-mod/README.md) for requirements and browser-session details.
 
 ## ElevenLabs Agents
 
@@ -14,11 +14,11 @@ A local BepInEx mod with a customized launcher. Speech recognition, conversation
 
 The local setup page currently uses German labels; the corresponding labels are included below.
 
-1. Open `Start-ElevenLabs.cmd` at the root of the extracted package. When building from source, the file is under `dist`. The local setup page opens at `http://127.0.0.1:8765`.
+1. Install the small ElevenLabs Agents ZIP and accept its optional bridge setup step. The local setup page opens at `http://127.0.0.1:8765`. To reopen it later, use `ElevenLabsAgents/Start-ElevenLabs.cmd` inside the game folder. Source builds can use the launcher under `dist`.
 2. Enter your ElevenLabs API key and preferred voice ID, then choose **Save locally** (**Lokal speichern**).
 3. Choose **Create new game agent** (**Neuen Spiel-Agenten anlegen**). This creates an agent and the `submit_game_turn` client tool in your ElevenLabs account. Alternatively, connect an existing agent configured for the game and its tool ID.
 4. Choose **Check agent** (**Agent prüfen**), then **Test response and voice** (**Antwort und Stimme testen**). The conversation test consumes ElevenLabs Agents usage.
-5. The customized launcher lists **ElevenLabs Agents** under **Get mods**. Once installed, the mod also appears under **Mods** and in the game's F1 menu.
+5. Once installed, the mod appears under **Mods** and in the game's F1 menu. The standard **Get mods** entry requires the provided catalogue entry to be added upstream.
 
 Version 1.0.1 uses the **character's language** (`Sprache des jeweiligen Charakters`) and `eleven_v4_turbo` by default. **Your microphone language** (`Deine Mikrofon-Sprache`) is independent of this setting and can, for example, remain German. For existing agents, **Enable character voices** (`Charakter-Stimmen aktivieren`) enables the required voice overrides.
 
@@ -26,7 +26,7 @@ To have every caller respond in German, select **Caller language → Everyone in
 
 On the first call, the backend selects a suitable voice from the available ElevenLabs voices using the character's recorded language, gender, and age. This assignment is retained for each character. Under **Callers and voices** (**Anrufer und Stimmen**), you can load detected callers, preview voices, and change each caller's language or voice. Previewing does not save changes. **Automatic selection** (**Automatische Auswahl**) resets manual overrides. If a character has no explicit language, the game's English default is used; language is not inferred from nationality or name.
 
-The original launcher's mod list is maintained by the `swyf-modding` project. A separate launcher version is therefore included to provide the additional local entries.
+The standard launcher's mod list is maintained by the `swyf-modding` project. [`catalogue/mods.json`](catalogue/mods.json) provides the three entries ready to add to it; publishing these packages does not automatically add the entries to the upstream catalogue. Older combined packages and the customized launcher remain available as historical releases.
 
 ## What the mod does
 
@@ -46,7 +46,7 @@ For speech recognition, the mod uses the game's existing microphone capture, rec
 
 API keys are stored locally as plain text in `bridge/.env`. They are not stored in the game configuration or returned in status responses. The local service binds only to `127.0.0.1` and rejects other origins and hosts.
 
-Local voice assignments are stored in `bridge/caller-profiles.json`. Credentials, voice assignments, and runtime logs are excluded from the ZIP packages. When running from `dist`, the corresponding paths are `dist/bridge/.env` and `dist/bridge/caller-profiles.json`.
+Local voice assignments are stored in `bridge/caller-profiles.json`. Credentials, voice assignments, and runtime logs are excluded from the ZIP packages. The optional stock setup installs the bridge under the game's `ElevenLabsAgents` folder, so its settings are `ElevenLabsAgents/bridge/.env` and `ElevenLabsAgents/bridge/caller-profiles.json`. Source builds running from `dist` use `dist/bridge/.env` and `dist/bridge/caller-profiles.json`. Existing setups are not imported or overwritten by the optional setup script.
 
 If the service is unavailable or ElevenLabs rejects a request, the enabled mod reports an error. Disabling it in the F1 menu or mod configuration restores the original providers.
 
@@ -61,19 +61,18 @@ cd ..
 .\mod\build.ps1 -NoCopy
 .\payout-mod\build.ps1
 .\scripts\Create-TikTokIcon.ps1
+.\webview-worker\build.ps1
 .\tiktok-mod\build.ps1
 .\scripts\Stage-Release.ps1
-.\scripts\Build-Launcher.ps1
-.\scripts\Package-Mod.ps1 -FileName SWYF-Mods-1.3.0.zip
-.\scripts\Package-PayoutMod.ps1
-.\scripts\Package-TikTokMod.ps1
+.\scripts\Package-CatalogueMods.ps1
+.\scripts\Test-CataloguePackages.ps1
 ```
 
-`scripts/Get-BuildDependencies.ps1` downloads the source dependencies listed below at pinned Git revisions into `upstream/`. Git, Node.js 22.13 or later, and the .NET 8 SDK are required. An optional portable compiler can be placed under `build/tools/dotnet`. Building the C# mods requires locally installed game assemblies and a configured BepInEx installation; game assemblies are not included. The launcher includes the official setup files and their license notices.
+`scripts/Get-BuildDependencies.ps1` downloads the source dependencies listed below at pinned Git revisions into `upstream/`. Git, Node.js 22.13 or later, and the .NET 8 SDK are required; the TikTok worker pins SDK **8.0.425**. An optional portable compiler can be placed under `build/tools/dotnet`. Building the C# mods requires locally installed game assemblies and a configured BepInEx installation; game assemblies are not included. The launcher includes the official setup files and their license notices.
 
 Verified checks include local Node tests covering independent character and player languages, stable voice assignments, concurrent callers, and identical greetings, as well as C# context tests, PCM buffer tests, and hook signatures for the installed game version. Real agent responses with language and voice overrides, along with a cleanly completed PCM audio stream, were tested using the configured account. The backend continues sending silent audio packets during voice output and after microphone recordings so that Agents completes its output and short utterances. Full conversation and multiplayer tests are still needed.
 
-For manual installation from the extracted package, run `scripts/Install-Mod.ps1 -PackageDirectory .` (use `-PackageDirectory dist` when building from source). Existing files are backed up under `BepInEx/elevenlabs-agents-backups`. Installation is refused while the game is running.
+For the current stock packages, use the catalogue's DLL destinations and optional setup steps described in [catalogue/README.md](catalogue/README.md). Source builds can still use `scripts/Install-Mod.ps1 -PackageDirectory dist`. That older installer expects the staged folder layout, rather than the new flat release ZIP.
 
 ## Sources
 

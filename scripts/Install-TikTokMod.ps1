@@ -6,6 +6,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Game-Paths.ps1')
+. (Join-Path $PSScriptRoot 'TikTok-WorkerPackage.ps1')
 $tikTokGame = Resolve-ScamGameDirectory $GameDirectory
 Assert-ScamGameClosed
 $tikTokPackage = [IO.Path]::GetFullPath($PackageDirectory)
@@ -22,7 +23,7 @@ foreach($requiredFile in @($tikTokPluginSource,$tikTokIconSource)){
     if(-not (Test-Path -LiteralPath $requiredFile -PathType Leaf)){throw 'The package is missing TikTok Pocket or its icon.'}
 }
 $tikTokAssembly = [Reflection.AssemblyName]::GetAssemblyName($tikTokPluginSource)
-if($tikTokAssembly.Name -ne 'ScamWYF.TikTokPocket'){throw 'Unexpected TikTok Pocket plugin assembly.'}
+if($tikTokAssembly.Name -ne 'ScamWYF.TikTokPocket' -or $tikTokAssembly.Version -ne [version]'1.0.1.0'){throw 'Unexpected TikTok Pocket plugin identity or version.'}
 $tikTokIconBytes = [IO.File]::ReadAllBytes($tikTokIconSource)
 if($tikTokIconBytes.Length -lt 8 -or $tikTokIconBytes.Length -gt 1048576 -or
     [BitConverter]::ToString($tikTokIconBytes,0,8) -ne '89-50-4E-47-0D-0A-1A-0A'){
@@ -31,6 +32,10 @@ if($tikTokIconBytes.Length -lt 8 -or $tikTokIconBytes.Length -gt 1048576 -or
 $tikTokCopies = [Collections.Generic.List[string]]::new()
 $tikTokCopies.Add($tikTokPluginRelative)
 $tikTokCopies.Add($tikTokIconRelative)
+$tikTokWorkerRelative = 'BepInEx/plugins/TikTokPocket/BrowserWorker'
+$tikTokWorkerPackage = Get-TikTokWorkerPackage -WorkerRoot (Get-ScamChildPath $tikTokPackage $tikTokWorkerRelative) -Version '1.0.1'
+$tikTokCopies.Add($tikTokWorkerRelative+'/worker-files.json')
+foreach($workerFile in $tikTokWorkerPackage.Files){$tikTokCopies.Add($tikTokWorkerRelative+'/'+$workerFile.Path)}
 $tikTokCoreRelative = 'BepInEx/core/ScamWYF.Modding.Core.dll'
 $tikTokCoreDestination = Get-ScamChildPath $tikTokGame $tikTokCoreRelative
 $tikTokNeedsCore = -not (Test-Path -LiteralPath $tikTokCoreDestination -PathType Leaf)
@@ -44,10 +49,15 @@ if($tikTokNeedsCore){
     $tikTokCopies.Add($tikTokCoreRelative)
 }
 $tikTokDisabledRelative = 'BepInEx/plugins_disabled/ScamWYF.TikTokPocket.dll'
+foreach($relative in @($tikTokCopies)+@($tikTokDisabledRelative)){
+    Assert-TikTokWorkerPath -Root $tikTokGame -Path (Get-ScamChildPath $tikTokGame $relative)
+}
 Write-Output "Game folder: $tikTokGame"
 Write-Output "Installs TikTok Pocket $($tikTokAssembly.Version)."
-if(-not $PSCmdlet.ShouldProcess($tikTokGame,'Back up and install TikTok Pocket and its icon')){return}
+Write-Output "Browser worker: $($tikTokWorkerPackage.Files.Count) manifest-verified files."
+if(-not $PSCmdlet.ShouldProcess($tikTokGame,'Back up and install TikTok Pocket, its icon and its local browser worker')){return}
 Assert-ScamGameClosed
+if(Get-Process -Name 'ScamWYF.TikTokBrowser' -ErrorAction SilentlyContinue){throw 'Close TikTok Pocket and the game before updating the browser worker.'}
 $tikTokBackup = Get-ScamChildPath $tikTokGame ('BepInEx/tiktok-pocket-backups/'+(Get-Date -Format 'yyyyMMdd-HHmmss-fff')+'-'+[guid]::NewGuid().ToString('N').Substring(0,8))
 $tikTokPrevious = @{}
 $tikTokWritten = [Collections.Generic.List[string]]::new()

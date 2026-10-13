@@ -86,7 +86,7 @@ $env:DOTNET_SKIP_FIRST_TIME_EXPERIENCE = '1'
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 Build-TikTokLibrary -Name 'ScamWYF.Modding.Core' -Sources (Join-Path $libraryRoot 'src') -Version '1.0.4'
 $pluginReferences += Join-Path $output 'ScamWYF.Modding.Core.dll'
-Build-TikTokLibrary -Name 'ScamWYF.TikTokPocket' -Sources (Join-Path $PSScriptRoot 'src') -Version '1.0.0' -ExtraReferences $pluginReferences
+Build-TikTokLibrary -Name 'ScamWYF.TikTokPocket' -Sources (Join-Path $PSScriptRoot 'src') -Version '1.0.1' -ExtraReferences $pluginReferences
 
 # Read metadata without loading the plugin or any game assembly into this build process.
 Add-Type -Path (Join-Path $core 'Mono.Cecil.dll')
@@ -102,10 +102,10 @@ try {
     $plugin = $plugins[0]
     if ([string]$plugin.ConstructorArguments[0].Value -ne 'com.community.scamwyf.tiktokpocket' -or
         [string]$plugin.ConstructorArguments[1].Value -ne 'TikTok Pocket' -or
-        [string]$plugin.ConstructorArguments[2].Value -ne '1.0.0') {
+        [string]$plugin.ConstructorArguments[2].Value -ne '1.0.1') {
         throw 'Unexpected TikTok Pocket plugin identity or version.'
     }
-    Write-Host 'Verified plugin: TikTok Pocket 1.0.0'
+    Write-Host 'Verified plugin: TikTok Pocket 1.0.1'
 }
 finally { $assembly.Dispose() }
 Write-Host 'Build only: no game files were changed. Game and browser libraries are references only.'

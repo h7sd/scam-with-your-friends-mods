@@ -25,15 +25,15 @@ The native game can award a successful card submission before its optional servi
 
 ## Installation
 
-Close the game, then install the mod in the customized launcher under **Get mods → Requested Payout → Install…**. It will then appear under **Mods** and in the F1 menu.
+Close the game, then install [Requested-Payout-1.2.0.zip](https://github.com/h7sd/Requested-Payout/releases/latest) through the standard launcher. The ZIP contains `ScamWYF.RequestedPayout.dll`, `ScamWYF.Modding.Core.dll`, and an optional usage/verification script, all at its root. It will then appear under **Mods** and in the F1 menu. The catalogue entry is provided in the source repository's `catalogue/mods.json`.
 
-Alternatively, extract the package and run:
+For a manual installation, copy the payout DLL to `BepInEx/plugins` and the shared library to `BepInEx/core`. The optional root script accepts `-GameDir` and only checks the installed version and displays usage notes. Source builds using `dist` can still run:
 
 ```powershell
-.\scripts\Install-PayoutMod.ps1 -GameDirectory 'C:\Path\To\Game' -PackageDirectory .
+.\scripts\Install-PayoutMod.ps1 -GameDirectory 'C:\Path\To\Game' -PackageDirectory dist
 ```
 
-The game must already be prepared for BepInEx mods. The package includes the shared mod library, version 1.0.4 or later. A compatible library that is already installed is kept. The installer backs up replaced files under `BepInEx/requested-payout-backups`.
+The game must already be prepared for BepInEx mods. The package includes shared mod library 1.0.4, routed to `core` by the catalogue. No bridge, browser runtime or additional download is needed for this mod. The older source installer retains compatible libraries and backs up replaced files under `BepInEx/requested-payout-backups`.
 
 In multiplayer, the **host** must load this mod. It requires neither ElevenLabs nor a separate AI backend provider.
 

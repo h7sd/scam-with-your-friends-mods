@@ -26,7 +26,7 @@ $testOut=Join-Path $testRoot 'build/tiktok-tests/native'
 New-Item -ItemType Directory -Path $testOut -Force|Out-Null
 $testExe=Join-Path $testOut 'TikTok.NativeTests.exe'
 $testRefs=@('mscorlib.dll','System.dll','System.Core.dll')|ForEach-Object{Join-Path $testFramework $_}
-$testRefs+=@('UnityEngine.dll','UnityEngine.CoreModule.dll','UnityEngine.UIElementsModule.dll','UnityEngine.UI.dll',
+$testRefs+=@('UnityEngine.dll','UnityEngine.CoreModule.dll','UnityEngine.UIElementsModule.dll','UnityEngine.UI.dll','UnityEngine.IMGUIModule.dll',
     'UnityEngine.UIModule.dll','UnityEngine.InputLegacyModule.dll','UnityEngine.AudioModule.dll','Unity.InputSystem.dll',
     'Assembly-CSharp.dll','ScriptsAssDef.dll','Mirror.dll','UniTask.dll','Newtonsoft.Json.dll',
     'VoltstroStudios.UnityWebBrowser.dll','VoltstroStudios.UnityWebBrowser.Shared.dll',
@@ -34,9 +34,18 @@ $testRefs+=@('UnityEngine.dll','UnityEngine.CoreModule.dll','UnityEngine.UIEleme
 $testRefs+=Join-Path $testCore '0Harmony.dll'
 $testArgs=@('-nologo','-target:exe','-langversion:7.3','-nostdlib+','-noconfig',('-out:'+$testExe))
 $testArgs+=$testRefs|ForEach-Object{'-r:'+$_}
-$testArgs+=@('NativeProgram.cs','NativeStubs.cs')|ForEach-Object{Join-Path $PSScriptRoot $_}
-$testArgs+=@('NativeApi.cs','CatalogHooks.cs','BrowserHooks.cs')|ForEach-Object{Join-Path (Split-Path $PSScriptRoot -Parent) ('src/'+$_)}
+$testArgs+=@('NativeProgram.cs','NativeStubs.cs','WorkerAdapterTests.cs')|ForEach-Object{Join-Path $PSScriptRoot $_}
+$testArgs+=@('NativeApi.cs','CatalogHooks.cs','BrowserHooks.cs','PocketBrowserHost.cs','WorkerBridge.cs','WorkerFiles.cs')|ForEach-Object{Join-Path (Split-Path $PSScriptRoot -Parent) ('src/'+$_)}
 & $testDotnet $testCompiler @testArgs
 if($LASTEXITCODE -ne 0){throw 'TikTok native harness compilation failed.'}
 & $testExe $testGameDir $testJson $testRoot
 if($LASTEXITCODE -ne 0){throw "TikTok native harness failed with exit $LASTEXITCODE"}
+# Pure worker production protocol tests need no WebView2, browser process, game engine,
+# profiles or network. Restore resolves only installed framework packs and an empty feed.
+$testProtocolOutput=Join-Path $testRoot 'build/tiktok-tests/worker-protocol'
+$testProtocolFeed=Join-Path $testRoot 'build/tiktok-tests/empty-feed'
+New-Item -ItemType Directory -Path $testProtocolFeed -Force|Out-Null
+& $testDotnet build (Join-Path $PSScriptRoot 'Worker.Protocol.Tests.csproj') -c Release -o $testProtocolOutput --source $testProtocolFeed -p:NuGetAudit=false -v minimal
+if($LASTEXITCODE -ne 0){throw 'Worker protocol test compilation failed.'}
+& $testDotnet (Join-Path $testProtocolOutput 'Worker.Protocol.Tests.dll')
+if($LASTEXITCODE -ne 0){throw 'Worker protocol tests failed.'}

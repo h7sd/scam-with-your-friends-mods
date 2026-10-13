@@ -1,6 +1,6 @@
 <#
 Builds a separate launcher with bundled local ElevenLabs Agents, Requested Payout and TikTok Pocket entries.
-The upstream checkout stays untouched. Build and stage the DLLs and TikTok icon before building the launcher.
+The upstream checkout stays untouched. Build and stage the DLLs, TikTok icon and browser helper before building the launcher.
 Use -OutputDirectory to build a release beside the running launcher without replacing its executable.
 #>
 [CmdletBinding()]
@@ -111,6 +111,47 @@ Replace-LauncherSource 'src\views\GetModsView.xaml' 'Mods are downloaded over ht
 
 $packageFolder = Join-Path $output 'LocalPackages'
 [IO.Directory]::CreateDirectory($packageFolder) | Out-Null
+. (Join-Path $PSScriptRoot 'TikTok-WorkerPackage.ps1')
+$workerRoot = Join-Path $dist 'BepInEx\plugins\TikTokPocket\BrowserWorker'
+$workerPackage = Get-TikTokWorkerPackage -WorkerRoot $workerRoot -Version '1.0.1'
+$workerManifestSha256 = (Get-FileHash -LiteralPath $workerPackage.ManifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
+$workerExpectedFiles = @(
+    'ScamWYF.TikTokBrowser.exe',
+    'Licenses/CsWinRT-LICENSE.txt',
+    'Licenses/DEPENDENCIES.md',
+    'Licenses/DotNet-LICENSE.txt',
+    'Licenses/DotNet-ThirdPartyNotices.txt',
+    'Licenses/DotNet-WindowsDesktop-LICENSE.txt',
+    'Licenses/Microsoft-WebView2-LICENSE.txt',
+    'Licenses/Microsoft-WebView2-NOTICE.txt',
+    'Licenses/SharpGen-LICENSE.txt',
+    'Licenses/System-IO-Pipelines-LICENSE.txt',
+    'Licenses/System-IO-Pipelines-NOTICES.txt',
+    'Licenses/System-Text-Encodings-Web-LICENSE.txt',
+    'Licenses/System-Text-Encodings-Web-NOTICES.txt',
+    'Licenses/System-Text-Json-LICENSE.txt',
+    'Licenses/System-Text-Json-NOTICES.txt',
+    'Licenses/Vortice-Mathematics-LICENSE.txt',
+    'Licenses/Vortice-Windows-LICENSE.txt',
+    'Licenses/Windows-SDK-LICENSE.txt'
+)
+$workerExpectedSet = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+foreach ($relative in $workerExpectedFiles) { $workerExpectedSet.Add($relative) | Out-Null }
+if ($workerPackage.Files.Count -ne $workerExpectedSet.Count) { throw 'The browser-worker file count differs from the required whitelist.' }
+foreach ($workerFile in $workerPackage.Files) {
+    if (-not $workerExpectedSet.Contains($workerFile.Path)) { throw 'The browser-worker manifest contains a file outside the required whitelist.' }
+}
+# Only the build copy receives this pin; the source template remains reusable for a verified rebuild.
+Replace-LauncherSource 'src\LocalModPackage.cs' '__TIKTOK_WORKER_MANIFEST_SHA256__' $workerManifestSha256
+$workerAssets = @(
+    [pscustomobject]@{ Source = $workerPackage.ManifestPath; Entry = 'TikTokPocket/BrowserWorker/worker-files.json' }
+)
+foreach ($workerFile in $workerPackage.Files) {
+    $workerAssets += [pscustomobject]@{
+        Source = $workerFile.FullPath
+        Entry = 'TikTokPocket/BrowserWorker/' + $workerFile.Path
+    }
+}
 $packages = @(
     [pscustomobject]@{ Name = 'ElevenLabs-Agents-1.0.1.zip'; Files = @(
         (Join-Path $dist 'BepInEx\plugins\ScamWYF.ElevenLabsAgents.dll'),
@@ -121,12 +162,12 @@ $packages = @(
         [IO.Path]::GetFullPath($PayoutModPath),
         (Join-Path $dist 'BepInEx\core\ScamWYF.Modding.Core.dll')
     ); Assets = @() },
-    [pscustomobject]@{ Name = 'TikTok-Pocket-1.0.0.zip'; Files = @(
+    [pscustomobject]@{ Name = 'TikTok-Pocket-1.0.1.zip'; Files = @(
         (Join-Path $dist 'BepInEx\plugins\ScamWYF.TikTokPocket.dll'),
         (Join-Path $dist 'BepInEx\core\ScamWYF.Modding.Core.dll')
-    ); Assets = @(
+    ); Assets = (@(
         [pscustomobject]@{ Source = (Join-Path $dist 'BepInEx\plugins\TikTokPocket\tiktok-pocket.png'); Entry = 'TikTokPocket/tiktok-pocket.png' }
-    ) }
+    ) + $workerAssets) }
 )
 foreach ($package in $packages) {
     foreach ($file in $package.Files) {
@@ -165,7 +206,7 @@ Copy-Item -LiteralPath (Join-Path $upstream 'vendor\README.md') -Destination (Jo
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'licenses\Mono.Cecil-LICENSE.txt') -Destination (Join-Path $output 'Mono.Cecil-LICENSE.txt')
 $distScripts = Join-Path ([IO.Path]::GetDirectoryName($output)) 'scripts'
 [IO.Directory]::CreateDirectory($distScripts) | Out-Null
-foreach ($file in @('Install-Mod.ps1', 'Install-PayoutMod.ps1', 'Install-TikTokMod.ps1', 'Game-Paths.ps1', 'Start-Bridge.ps1', 'Start-Backend.ps1')) {
+foreach ($file in @('Install-Mod.ps1', 'Install-PayoutMod.ps1', 'Install-TikTokMod.ps1', 'TikTok-WorkerPackage.ps1', 'Game-Paths.ps1', 'Start-Bridge.ps1', 'Start-Backend.ps1')) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot $file) -Destination (Join-Path $distScripts $file) -Force
 }
 Write-Output "Built local launcher: $(Join-Path $output 'ScamWYF.Launcher.exe')"

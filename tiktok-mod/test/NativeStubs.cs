@@ -11,7 +11,7 @@ namespace ScamWYF.TikTokPocket
         internal const string AppId = "tiktok-pocket", ProductId = "tiktok-pocket-license";
         internal static Plugin Current;
         internal int ShopPrice = 1000;
-        internal string IconPath, ProfilePath, Status;
+        internal string IconPath, WorkerPath, Status;
         internal TestSetting RememberSession = new TestSetting();
         internal void SetStatus(string status) { Status = status; }
         internal void ReportCompatibility(string status) {Status=status;}
@@ -20,7 +20,8 @@ namespace ScamWYF.TikTokPocket
 
 namespace ScamWYF.Modding.Core.Ui
 {
-    internal static class ModMenu {internal static void Refresh() {}}
+    internal static class ModMenu {internal static bool IsOpen;internal static void Refresh() {}}
+    internal static class FeedbackUi {internal static bool IsOpen;}
 }
 
 namespace ScamWYF.Modding.Core
