@@ -2,7 +2,7 @@
 
 This repository provides **ElevenLabs Agents 1.0.1** and **Requested Payout 1.2.0** for credit card and gift card scams. Each mod has its own small ZIP and release repository for the standard ScamWYF launcher. See [stock launcher packages and catalogue entries](catalogue/README.md).
 
-Download [ElevenLabs Agents](https://github.com/h7sd/ElevenLabs-Agents/releases/latest) or [Requested Payout](https://github.com/h7sd/Requested-Payout/releases/latest). Each latest release contains exactly one mod ZIP with bare DLL names and an optional post-install script at its root. Bridge files are downloaded separately by the setup step; keys and configuration are never packaged.
+Download [ElevenLabs Agents](https://github.com/h7sd/ElevenLabs-Agents/releases/latest) or [Requested Payout](https://github.com/h7sd/Requested-Payout/releases/latest). Each latest release contains one ZIP with exactly that mod's own DLL and its post-install script at the root. Packaging releases 1.0.2 and 1.2.1 retain the existing mod DLL versions. Required Core, AI Backend and bridge files are downloaded separately by setup; keys and configuration are never packaged. Accept setup on a fresh installation, or install the documented dependencies manually before launching the game.
 
 ## ElevenLabs Agents
 
@@ -12,7 +12,7 @@ A local BepInEx mod with a customized launcher. Speech recognition, conversation
 
 The local setup page currently uses German labels; the corresponding labels are included below.
 
-1. Install the small ElevenLabs Agents ZIP and accept its optional bridge setup step. The local setup page opens at `http://127.0.0.1:8765`. To reopen it later, use `ElevenLabsAgents/Start-ElevenLabs.cmd` inside the game folder. Source builds can use the launcher under `dist`.
+1. Install the small ElevenLabs Agents ZIP and accept its dependency and bridge setup step. The local setup page opens at `http://127.0.0.1:8765`. To reopen it later, use `ElevenLabsAgents/Start-ElevenLabs.cmd` inside the game folder. Source builds can use the launcher under `dist`.
 2. Enter your ElevenLabs API key and preferred voice ID, then choose **Save locally** (**Lokal speichern**).
 3. Choose **Create new game agent** (**Neuen Spiel-Agenten anlegen**). This creates an agent and the `submit_game_turn` client tool in your ElevenLabs account. Alternatively, connect an existing agent configured for the game and its tool ID.
 4. Choose **Check agent** (**Agent prüfen**), then **Test response and voice** (**Antwort und Stimme testen**). The conversation test consumes ElevenLabs Agents usage.

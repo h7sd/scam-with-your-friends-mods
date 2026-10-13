@@ -16,9 +16,15 @@ Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $catalogueAuditResults=[pscustomobject]@{Passed=0;NegativeCases=0}
 $catalogueAuditExpected=@(
-    [pscustomobject]@{Repo='ElevenLabs-Agents';Name='ElevenLabs Agents';Version='1.0.1';Zip='ElevenLabs-Agents-1.0.1.zip';Script='setup-elevenlabs-agents.ps1';Files=@('ScamWYF.ElevenLabsAgents.dll','ScamWYF.AiBackend.dll','ScamWYF.Modding.Core.dll')},
-    [pscustomobject]@{Repo='Requested-Payout';Name='Requested Payout';Version='1.2.0';Zip='Requested-Payout-1.2.0.zip';Script='post-install-requested-payout.ps1';Files=@('ScamWYF.RequestedPayout.dll','ScamWYF.Modding.Core.dll')}
+    [pscustomobject]@{Repo='ElevenLabs-Agents';Name='ElevenLabs Agents';Version='1.0.1';Zip='ElevenLabs-Agents-1.0.2.zip';Script='setup-elevenlabs-agents.ps1';Files=@('ScamWYF.ElevenLabsAgents.dll')},
+    [pscustomobject]@{Repo='Requested-Payout';Name='Requested Payout';Version='1.2.0';Zip='Requested-Payout-1.2.1.zip';Script='post-install-requested-payout.ps1';Files=@('ScamWYF.RequestedPayout.dll')}
 )
+$catalogueAuditDependencyExpected=@(
+    [pscustomobject]@{Repo='Modding-Core';Name='Shared Mod Library';Version='1.0.4';Zip='Modding-Core-1.0.4.zip';Script='post-install-modding-core.ps1';Files=@('ScamWYF.Modding.Core.dll')},
+    [pscustomobject]@{Repo='AI-Backend';Name='AI Backend';Version='1.1.0';Zip='AI-Backend-1.1.0.zip';Script='post-install-ai-backend.ps1';Files=@('ScamWYF.AiBackend.dll')}
+)
+$catalogueAuditDependencies=@{}
+$catalogueAuditDependencyPins=@{}
 $catalogueAuditPluginIdentity=@{
     'ScamWYF.ElevenLabsAgents.dll'=@('com.community.scamwyf.elevenlabsagents','ElevenLabs Agents','1.0.1')
     'ScamWYF.AiBackend.dll'=@('com.community.scamwyf.aibackend','Scam WYF AI Backend','1.1.0')
@@ -144,14 +150,28 @@ function Assert-CataloguePackage {
             if($errors.Count -ne 0){throw 'Optional setup script contains PowerShell syntax errors.'}
             if(@($ast.ParamBlock.Parameters|Where-Object {$_.Name.VariablePath.UserPath -ceq 'GameDir'}).Count -ne 1){throw 'Setup script must accept the standard launcher -GameDir parameter.'}
             if($text -notmatch 'Permission\s+is\s+hereby\s+granted' -or $text -notmatch 'THE SOFTWARE IS PROVIDED'){throw 'DLL-only distribution setup script must carry the MIT notices.'}
-            if($Expected.Repo -cne 'Requested-Payout'){
+            if($Expected.Repo -ceq 'ElevenLabs-Agents'){
                 if($text -notmatch 'https://github\.com/h7sd/scam-with-your-friends-mods/releases/download/catalogue-runtime-v1\.0\.1/' -or $text -notmatch '\b[0-9a-fA-F]{64}\b' -or $text -match '/releases/latest/' -or $text -match '__[A-Z0-9_]+__'){throw 'Runtime setup requires a fixed companion URL and a stamped SHA-256 digest.'}
+            }
+            if($catalogueAuditExpected.Repo -ccontains $Expected.Repo){
+                if($text -notmatch 'https://github\.com/h7sd/scam-with-your-friends-mods/releases/download/catalogue-dependencies-v1\.0\.0/' -or $text -match '__[A-Z0-9_]+__'){throw 'Active setup must use fixed, stamped separate dependency packages.'}
+                # The shared embedded helper carries both definitions, including the
+                # unused AI Backend definition in Requested Payout. Pin every copy so
+                # a mixed-generation helper/package set cannot pass validation.
+                $neededDependencies=@('ScamWYF.Modding.Core.dll','ScamWYF.AiBackend.dll')
+                foreach($needed in $neededDependencies){
+                    $pin=$catalogueAuditDependencyPins[$needed]
+                    if($null -eq $pin){throw 'Separate dependency package pins must be validated before the active script.'}
+                    $pattern="(?s)Archive\s*=\s*'"+[Regex]::Escape($pin.Archive)+"'[^}]*Relative\s*=\s*'"+[Regex]::Escape($pin.Relative)+"'[^}]*ArchiveSha256\s*=\s*'"+$pin.ArchiveSha256+"'[^}]*DllSha256\s*=\s*'"+$pin.DllSha256+"'"
+                    if($text -notmatch $pattern){throw 'Embedded dependency archive/DLL hashes or install routing differ from the separate package.'}
+                }
             }
         }
     }
     if($Expected.Repo -ceq 'ElevenLabs-Agents'){
-        $agents=$metadata['ScamWYF.ElevenLabsAgents.dll'];$backend=$metadata['ScamWYF.AiBackend.dll']
-        if($agents.References -cnotcontains 'ScamWYF.AiBackend' -or $null -eq $agents.Dependency -or $agents.Dependency.Guid -cne $backend.Plugins[0].Guid -or ($agents.Dependency.Flags -band 1) -ne 1){throw 'ElevenLabs Agents requires its actual hard-dependent AI Backend plugin in this package.'}
+        $agents=$metadata['ScamWYF.ElevenLabsAgents.dll'];$backend=$catalogueAuditDependencies['ScamWYF.AiBackend.dll']
+        if($null -eq $backend -or $null -eq $catalogueAuditDependencies['ScamWYF.Modding.Core.dll']){throw 'Validate the separate Core and AI Backend packages before the active plugin.'}
+        if($agents.References -cnotcontains 'ScamWYF.AiBackend' -or $null -eq $agents.Dependency -or $agents.Dependency.Guid -cne $backend.Plugins[0].Guid -or ($agents.Dependency.Flags -band 1) -ne 1){throw 'ElevenLabs Agents requires its actual hard-dependent plugin in the separately validated AI Backend package.'}
     }
     return $metadata
 }
@@ -182,32 +202,50 @@ function Edit-CataloguePluginMetadata {
         }finally{$assembly.Dispose()}
     }finally{$metadataOutput.Dispose();$metadataInput.Dispose()}
 }
+function Test-CatalogueArchive {
+    param($Spec,$Declaration)
+    $entries=Get-CatalogueZipEntries (Join-Path $PackageDirectory $Spec.Zip)
+    $metadata=Assert-CataloguePackage $entries $Spec $Declaration
+    foreach($dllName in $Spec.Files){
+        $dll=$metadata[$dllName]
+        $packedBytes=($entries|Where-Object {$_.Name -ceq $dllName}).Bytes
+        $hasher=[Security.Cryptography.SHA256]::Create()
+        try{$packedHash=[BitConverter]::ToString($hasher.ComputeHash([byte[]]$packedBytes)).Replace('-','')}
+        finally{$hasher.Dispose()}
+        $sourceHash=(Get-FileHash -LiteralPath (Join-Path $catalogueAuditRoot $catalogueAuditCompiledSources[$dllName]) -Algorithm SHA256).Hash
+        Assert-CatalogueCondition ($packedHash -ceq $sourceHash) ('Packed DLL differs from its actual compiled source: '+$dllName)
+        $catalogueAuditVersions.Add([pscustomobject]@{Package=$Spec.Repo;File=$dllName;Version=$(if($dll.Plugins.Count){$dll.Plugins[0].Version}else{$dll.Version})})
+    }
+    Assert-CatalogueCondition $true ('Real thin ZIP layout/metadata/script checks: '+$Spec.Repo)
+    return [pscustomobject]@{Entries=$entries;Metadata=$metadata}
+}
 $catalogueAuditDocument=[IO.File]::ReadAllText([IO.Path]::GetFullPath($CataloguePath))|ConvertFrom-Json
 Assert-CatalogueDocument $catalogueAuditDocument
 Assert-CatalogueCondition $true 'Prepared catalogue schema/identities/routes/scripts'
 $catalogueAuditPackages=@{}
 $catalogueAuditVersions=[Collections.Generic.List[object]]::new()
+foreach($catalogueAuditDependency in $catalogueAuditDependencyExpected){
+    $catalogueAuditDependencyResult=Test-CatalogueArchive $catalogueAuditDependency $null
+    foreach($catalogueAuditDependencyDll in $catalogueAuditDependency.Files){
+        $catalogueAuditDependencies[$catalogueAuditDependencyDll]=$catalogueAuditDependencyResult.Metadata[$catalogueAuditDependencyDll]
+        $catalogueAuditDependencyPins[$catalogueAuditDependencyDll]=[pscustomobject]@{
+            Archive=$catalogueAuditDependency.Zip
+            Relative=$(if($catalogueAuditDependencyDll -ceq 'ScamWYF.Modding.Core.dll'){'BepInEx/core/'}else{'BepInEx/plugins/'})+$catalogueAuditDependencyDll
+            ArchiveSha256=(Get-FileHash -LiteralPath (Join-Path $PackageDirectory $catalogueAuditDependency.Zip)).Hash.ToLowerInvariant()
+            DllSha256=(Get-FileHash -LiteralPath (Join-Path $catalogueAuditRoot $catalogueAuditCompiledSources[$catalogueAuditDependencyDll])).Hash.ToLowerInvariant()
+        }
+    }
+}
 for($catalogueAuditIndex=0;$catalogueAuditIndex -lt $catalogueAuditExpected.Count;$catalogueAuditIndex++){
     $catalogueAuditSpec=$catalogueAuditExpected[$catalogueAuditIndex]
-    $catalogueAuditEntries=Get-CatalogueZipEntries (Join-Path $PackageDirectory $catalogueAuditSpec.Zip)
-    $catalogueAuditMetadata=Assert-CataloguePackage $catalogueAuditEntries $catalogueAuditSpec $catalogueAuditDocument.mods[$catalogueAuditIndex]
-    $catalogueAuditPackages[$catalogueAuditSpec.Repo]=$catalogueAuditEntries
-    foreach($catalogueAuditDllName in $catalogueAuditSpec.Files){
-        $catalogueAuditDll=$catalogueAuditMetadata[$catalogueAuditDllName]
-        $catalogueAuditPackedBytes=($catalogueAuditEntries|Where-Object {$_.Name -ceq $catalogueAuditDllName}).Bytes
-        $catalogueAuditHasher=[Security.Cryptography.SHA256]::Create()
-        try{$catalogueAuditPackedHash=[BitConverter]::ToString($catalogueAuditHasher.ComputeHash([byte[]]$catalogueAuditPackedBytes)).Replace('-','')}
-        finally{$catalogueAuditHasher.Dispose()}
-        $catalogueAuditSourceHash=(Get-FileHash -LiteralPath (Join-Path $catalogueAuditRoot $catalogueAuditCompiledSources[$catalogueAuditDllName]) -Algorithm SHA256).Hash
-        Assert-CatalogueCondition ($catalogueAuditPackedHash -ceq $catalogueAuditSourceHash) ('Packed DLL differs from its actual compiled source: '+$catalogueAuditDllName)
-        $catalogueAuditVersions.Add([pscustomobject]@{Package=$catalogueAuditSpec.Repo;File=$catalogueAuditDllName;Version=$(if($catalogueAuditDll.Plugins.Count){$catalogueAuditDll.Plugins[0].Version}else{$catalogueAuditDll.Version})})
-    }
-    Assert-CatalogueCondition $true ('Real thin ZIP layout/metadata/script checks: '+$catalogueAuditSpec.Repo)
+    $catalogueAuditArchiveResult=Test-CatalogueArchive $catalogueAuditSpec $catalogueAuditDocument.mods[$catalogueAuditIndex]
+    $catalogueAuditPackages[$catalogueAuditSpec.Repo]=$catalogueAuditArchiveResult.Entries
 }
 foreach($mutate in @(
     {param($d)$d.schemaVersion='1'},
     {param($d)$d.mods[0].files[0].folder='core'},
-    {param($d)($d.mods[0].files|Where-Object {$_.fileName -ceq 'ScamWYF.Modding.Core.dll'}).expectsPluginAttribute=$true},
+    {param($d)$d.mods[0].files[0].expectsPluginAttribute=$false},
+    {param($d)$d.mods[0].files=@($d.mods[0].files)+@([pscustomobject]@{fileName='ScamWYF.Modding.Core.dll';folder='core';expectsPluginAttribute=$false})},
     {param($d)$d.mods[1].postInstall[0].script='nested/setup.ps1'},
     {param($d)$d.mods[1].summary=('x'*501)},
     {param($d)$d|Add-Member -NotePropertyName unexpected -NotePropertyValue $true},
@@ -233,11 +271,12 @@ for($catalogueAuditInactiveIndex=0;$catalogueAuditInactiveIndex -lt $catalogueAu
     $catalogueAuditActiveSpec=$catalogueAuditExpected[$catalogueAuditInactiveIndex]
     $catalogueAuditActiveEntries=$catalogueAuditPackages[$catalogueAuditActiveSpec.Repo]
     $catalogueAuditActiveDeclaration=$catalogueAuditDocument.mods[$catalogueAuditInactiveIndex]
-    foreach($catalogueAuditInactiveName in @('ScamWYF.TikTokPocket.dll','TikTok-Pocket-1.0.1.zip')){
-        Assert-CatalogueRejected {Assert-CataloguePackage (@($catalogueAuditActiveEntries)+@([pscustomobject]@{Name=$catalogueAuditInactiveName;Bytes=[byte[]]@(1)})) $catalogueAuditActiveSpec $catalogueAuditActiveDeclaration} ('Inactive TikTok content inside '+$catalogueAuditActiveSpec.Repo)
+    $catalogueAuditOtherPlugin=if($catalogueAuditActiveSpec.Repo -ceq 'ElevenLabs-Agents'){'ScamWYF.RequestedPayout.dll'}else{'ScamWYF.ElevenLabsAgents.dll'}
+    foreach($catalogueAuditInactiveName in @('ScamWYF.TikTokPocket.dll','TikTok-Pocket-1.0.1.zip','ScamWYF.Modding.Core.dll','ScamWYF.AiBackend.dll',$catalogueAuditOtherPlugin)){
+        Assert-CatalogueRejected {Assert-CataloguePackage (@($catalogueAuditActiveEntries)+@([pscustomobject]@{Name=$catalogueAuditInactiveName;Bytes=[byte[]]@(1)})) $catalogueAuditActiveSpec $catalogueAuditActiveDeclaration} ('Foreign mod/dependency content inside '+$catalogueAuditActiveSpec.Repo)
     }
 }
-foreach($badKind in @('duplicate','unreadable','attribute','version','oversize-script','bad-parameter')){
+foreach($badKind in @('duplicate','unreadable','attribute','version','oversize-script','bad-parameter','wrong-dependency-pin','wrong-unused-ai-pin')){
     $catalogueAuditBadEntries=@(foreach($entry in $catalogueAuditValidPayout){[pscustomobject]@{Name=$entry.Name;Bytes=$entry.Bytes}})
     $catalogueAuditBadPlugin=($catalogueAuditBadEntries|Where-Object {$_.Name -ceq 'ScamWYF.RequestedPayout.dll'})
     switch($badKind){
@@ -247,6 +286,16 @@ foreach($badKind in @('duplicate','unreadable','attribute','version','oversize-s
         'version'{$catalogueAuditBadPlugin.Bytes=Edit-CataloguePluginMetadata $catalogueAuditBadPlugin.Bytes $false}
         'oversize-script'{($catalogueAuditBadEntries|Where-Object {$_.Name -ceq $catalogueAuditPayout.Script}).Bytes=[Text.Encoding]::UTF8.GetBytes(('x'*65537))}
         'bad-parameter'{($catalogueAuditBadEntries|Where-Object {$_.Name -ceq $catalogueAuditPayout.Script}).Bytes=[Text.Encoding]::UTF8.GetBytes('param([string]$Other)')}
+        'wrong-dependency-pin'{
+            $catalogueAuditBadScript=$catalogueAuditBadEntries|Where-Object {$_.Name -ceq $catalogueAuditPayout.Script}
+            $catalogueAuditBadText=[Text.Encoding]::UTF8.GetString($catalogueAuditBadScript.Bytes).Replace($catalogueAuditDependencyPins['ScamWYF.Modding.Core.dll'].ArchiveSha256,('0'*64))
+            $catalogueAuditBadScript.Bytes=[Text.Encoding]::UTF8.GetBytes($catalogueAuditBadText)
+        }
+        'wrong-unused-ai-pin'{
+            $catalogueAuditBadScript=$catalogueAuditBadEntries|Where-Object {$_.Name -ceq $catalogueAuditPayout.Script}
+            $catalogueAuditBadText=[Text.Encoding]::UTF8.GetString($catalogueAuditBadScript.Bytes).Replace($catalogueAuditDependencyPins['ScamWYF.AiBackend.dll'].DllSha256,('0'*64))
+            $catalogueAuditBadScript.Bytes=[Text.Encoding]::UTF8.GetBytes($catalogueAuditBadText)
+        }
     }
     Assert-CatalogueRejected {Assert-CataloguePackage $catalogueAuditBadEntries $catalogueAuditPayout $catalogueAuditPayoutDeclaration} ('Invalid actual metadata or script: '+$badKind)
 }

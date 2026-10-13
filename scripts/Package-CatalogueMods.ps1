@@ -9,16 +9,20 @@ $ErrorActionPreference='Stop'
 $catalogueProject=[IO.Path]::GetFullPath($ProjectDirectory)
 $cataloguePackageRoot=Join-Path $catalogueProject 'build/catalogue-packages'
 [IO.Directory]::CreateDirectory($cataloguePackageRoot)|Out-Null
+if($Mod -ne 'TikTok'){
+    & (Join-Path $PSScriptRoot 'Package-CatalogueDependencies.ps1') -ProjectDirectory $catalogueProject
+    $dependencyDigests=Get-Content -LiteralPath (Join-Path $cataloguePackageRoot 'dependency-digests.json') -Raw|ConvertFrom-Json
+}
 if($Mod -ne 'RequestedPayout'){
     if(-not $UseExistingRuntime){& (Join-Path $PSScriptRoot 'Package-CatalogueRuntime.ps1') -ProjectDirectory $catalogueProject -IncludeTikTok:($Mod -eq 'TikTok')}
     $digests=Get-Content -LiteralPath (Join-Path $cataloguePackageRoot 'runtime-digests.json') -Raw|ConvertFrom-Json
 }
 $commonCore='dist/BepInEx/core/ScamWYF.Modding.Core.dll'
 $definitions=@(
-    @{Key='ElevenLabs';Repo='ElevenLabs-Agents';Version='1.0.1';Script='setup-elevenlabs-agents.ps1';Dlls=[ordered]@{
-        'ScamWYF.ElevenLabsAgents.dll'='mod/bin/ScamWYF.ElevenLabsAgents.dll';'ScamWYF.AiBackend.dll'='upstream/AI-Backend/bin/ScamWYF.AiBackend.dll';'ScamWYF.Modding.Core.dll'=$commonCore}},
-    @{Key='RequestedPayout';Repo='Requested-Payout';Version='1.2.0';Script='post-install-requested-payout.ps1';Dlls=[ordered]@{
-        'ScamWYF.RequestedPayout.dll'='payout-mod/bin/ScamWYF.RequestedPayout.dll';'ScamWYF.Modding.Core.dll'=$commonCore}},
+    @{Key='ElevenLabs';Repo='ElevenLabs-Agents';Version='1.0.2';Script='setup-elevenlabs-agents.ps1';Dlls=[ordered]@{
+        'ScamWYF.ElevenLabsAgents.dll'='mod/bin/ScamWYF.ElevenLabsAgents.dll'}},
+    @{Key='RequestedPayout';Repo='Requested-Payout';Version='1.2.1';Script='post-install-requested-payout.ps1';Dlls=[ordered]@{
+        'ScamWYF.RequestedPayout.dll'='payout-mod/bin/ScamWYF.RequestedPayout.dll'}},
     @{Key='TikTok';Repo='TikTok-Pocket';Version='1.0.1';Script='setup-tiktok-pocket.ps1';Dlls=[ordered]@{
         'ScamWYF.TikTokPocket.dll'='tiktok-mod/bin/ScamWYF.TikTokPocket.dll';'ScamWYF.Modding.Core.dll'=$commonCore}}
 )
@@ -30,6 +34,12 @@ foreach($definition in $definitions){
     if($Mod -ne 'All' -and $definition.Key -ne $Mod){continue}
     $scriptPath=Join-Path $catalogueProject ('scripts/post-install/'+$definition.Script)
     $scriptBody=[IO.File]::ReadAllText($scriptPath)
+    if($definition.Key -ne 'TikTok'){
+        $helper=[IO.File]::ReadAllText((Join-Path $catalogueProject 'scripts/post-install/dependency-setup.ps1'))
+        $scriptBody=$scriptBody.Replace('__DEPENDENCY_SETUP_HELPER__',$helper)
+        $scriptBody=$scriptBody.Replace('__CORE_ARCHIVE_SHA256__',$dependencyDigests.coreArchiveSha256).Replace('__CORE_DLL_SHA256__',$dependencyDigests.coreDllSha256)
+        $scriptBody=$scriptBody.Replace('__AI_BACKEND_ARCHIVE_SHA256__',$dependencyDigests.aiBackendArchiveSha256).Replace('__AI_BACKEND_DLL_SHA256__',$dependencyDigests.aiBackendDllSha256)
+    }
     if($definition.Key -eq 'ElevenLabs'){
         $scriptBody=$scriptBody.Replace('__ELEVENLABS_BRIDGE_SHA256__',$digests.bridgeArchiveSha256).Replace('__ELEVENLABS_BRIDGE_MANIFEST_SHA256__',$digests.bridgeManifestSha256)
     } elseif($definition.Key -eq 'TikTok'){
@@ -54,9 +64,13 @@ foreach($definition in $definitions){
             if(-not (Test-Path -LiteralPath $source -PathType Leaf)){throw ('Required mod DLL missing: '+$dll.Key)}
             $identity=[Reflection.AssemblyName]::GetAssemblyName($source)
             if($identity.Name+'.dll' -cne $dll.Key){throw 'Mod DLL assembly identity does not match filename.'}
-            [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive,$source,$dll.Key,[IO.Compression.CompressionLevel]::Optimal)|Out-Null
+            $dllEntry=$archive.CreateEntry($dll.Key,[IO.Compression.CompressionLevel]::Optimal)
+            $dllEntry.LastWriteTime=[DateTimeOffset]'2000-01-01T00:00:00+00:00'
+            $input=[IO.File]::OpenRead($source);$write=$dllEntry.Open()
+            try{$input.CopyTo($write)}finally{$write.Dispose();$input.Dispose()}
         }
         $entry=$archive.CreateEntry($definition.Script,[IO.Compression.CompressionLevel]::Optimal)
+        $entry.LastWriteTime=[DateTimeOffset]'2000-01-01T00:00:00+00:00'
         $write=$entry.Open();try {$write.Write($scriptBytes,0,$scriptBytes.Length)}finally{$write.Dispose()}
     } finally {$archive.Dispose();$stream.Dispose()}
     if((Get-Item -LiteralPath $zipPath).Length -gt 33554432){throw 'Mod ZIP exceeds the stock launcher 32 MiB limit.'}

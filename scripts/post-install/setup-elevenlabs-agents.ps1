@@ -1,15 +1,17 @@
-<# Optional stock-launcher setup for ElevenLabs Agents 1.0.1.
+<# Optional stock-launcher setup package for ElevenLabs Agents 1.0.2.
    Release licence notices are prepended by the package generator.
-   Downloads only the pinned public bridge package; never imports keys or accounts.
+   Downloads pinned shared dependencies and the public bridge; never imports keys or accounts.
 #>
 [CmdletBinding(SupportsShouldProcess=$true)]
 param(
     [Parameter(Mandatory=$true)][string]$GameDir,
     [string]$RuntimeArchive,
+    [string]$DependencyDirectory,
     [switch]$NoStart
 )
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version 2
+__DEPENDENCY_SETUP_HELPER__
 $bridgeRuntimeUrl='https://github.com/h7sd/scam-with-your-friends-mods/releases/download/catalogue-runtime-v1.0.1/ElevenLabs-Agents-Bridge-1.0.1.zip'
 $bridgeRuntimeSha256='__ELEVENLABS_BRIDGE_SHA256__'
 $bridgeManifestSha256='__ELEVENLABS_BRIDGE_MANIFEST_SHA256__'
@@ -86,7 +88,7 @@ function Download-BridgeRuntime([string]$Destination) {
             return
         }
         throw 'Unavailable archive.'
-    } catch {throw 'The pinned ElevenLabs Agents bridge could not be downloaded safely. No game files were changed; try setup again when the release is available.'}
+    } catch {throw 'The pinned ElevenLabs Agents bridge could not be downloaded safely. Shared mod dependencies may already be installed; try setup again when the release is available.'}
     finally {if($null -ne $response) {$response.Dispose()};$client.Dispose();$handler.Dispose();$timeout.Dispose();[Net.ServicePointManager]::SecurityProtocol=$oldTls}
 }
 function Expand-BridgeRuntime([string]$ArchivePath,[string]$Destination) {
@@ -181,18 +183,25 @@ Assert-BridgeClosed
 foreach($pin in @($bridgeRuntimeSha256,$bridgeManifestSha256)) {if($pin -cnotmatch '\A[0-9a-f]{64}\z') {throw 'This ElevenLabs Agents setup build is missing its pinned release digests.'}}
 $bridgeGame=[IO.Path]::GetFullPath($GameDir).TrimEnd('\','/');Assert-BridgePath $bridgeGame $bridgeGame
 foreach($required in @('Scam With Your Friends.exe','winhttp.dll','BepInEx/core/BepInEx.dll','unstripped_corlib/mscorlib.dll')) {if(-not (Test-Path -LiteralPath (Get-BridgeChild $bridgeGame $required) -PathType Leaf)) {throw 'Select the game folder and complete BepInEx Setup in the launcher first.'}}
-foreach($mod in @(@('plugins/ScamWYF.ElevenLabsAgents.dll','ScamWYF.ElevenLabsAgents','1.0.1.0'),@('plugins/ScamWYF.AiBackend.dll','ScamWYF.AiBackend','1.1.0.0'),@('core/ScamWYF.Modding.Core.dll','ScamWYF.Modding.Core','1.0.4.0'))) {
-    $path=Get-BridgeChild $bridgeGame ('BepInEx/'+$mod[0])
-    if(-not (Test-Path -LiteralPath $path -PathType Leaf)) {throw 'Install ElevenLabs Agents, AI Backend and the shared library through the launcher before running setup.'}
-    $identity=[Reflection.AssemblyName]::GetAssemblyName($path)
-    $badVersion=if($mod[1] -ceq 'ScamWYF.Modding.Core') {$identity.Version -lt [version]$mod[2]} else {$identity.Version -ne [version]$mod[2]}
-    if($identity.Name -cne $mod[1] -or $badVersion) {throw 'This setup requires ElevenLabs Agents 1.0.1, AI Backend 1.1.0 and shared Core 1.0.4 or newer.'}
-}
+$bridgeOwnDll=Get-BridgeChild $bridgeGame 'BepInEx/plugins/ScamWYF.ElevenLabsAgents.dll'
+if(-not (Test-Path -LiteralPath $bridgeOwnDll -PathType Leaf)) {throw 'Install the ElevenLabs Agents DLL through the launcher before running setup.'}
+$bridgeOwnIdentity=[Reflection.AssemblyName]::GetAssemblyName($bridgeOwnDll)
+if($bridgeOwnIdentity.Name -cne 'ScamWYF.ElevenLabsAgents' -or $bridgeOwnIdentity.Version -ne [version]'1.0.1.0') {throw 'This setup expects the ElevenLabs Agents 1.0.1 DLL.'}
 $node=Get-Command node -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
 if(-not $node) {throw 'Node.js 22.13 or newer is required. Install Node.js from nodejs.org before running setup.'}
 $nodeVersion=& $node.Source -p 'process.versions.node';$parsedVersion=$null
 if($LASTEXITCODE -ne 0 -or -not [version]::TryParse([string]$nodeVersion,[ref]$parsedVersion) -or $parsedVersion -lt [version]'22.13.0') {throw 'Node.js 22.13 or newer is required. Setup does not install it automatically.'}
 $bridgePort=Get-BridgePort $bridgeGame
+$coreReady=Install-CatalogueDependency -GameDir $bridgeGame -Name Core -DependencyDirectory $DependencyDirectory -Caller $PSCmdlet
+$aiReady=Install-CatalogueDependency -GameDir $bridgeGame -Name AiBackend -DependencyDirectory $DependencyDirectory -Caller $PSCmdlet
+if(-not $coreReady -or -not $aiReady) {return}
+foreach($mod in @(@('plugins/ScamWYF.AiBackend.dll','ScamWYF.AiBackend','1.1.0.0'),@('core/ScamWYF.Modding.Core.dll','ScamWYF.Modding.Core','1.0.4.0'))) {
+    $path=Get-BridgeChild $bridgeGame ('BepInEx/'+$mod[0])
+    if(-not (Test-Path -LiteralPath $path -PathType Leaf)) {throw 'A shared mod dependency is missing. Run this post-install script again.'}
+    $identity=[Reflection.AssemblyName]::GetAssemblyName($path)
+    $badVersion=if($mod[1] -ceq 'ScamWYF.Modding.Core') {$identity.Version -lt [version]$mod[2]} else {$identity.Version -ne [version]$mod[2]}
+    if($identity.Name -cne $mod[1] -or $badVersion) {throw 'This setup requires AI Backend 1.1.0 and shared Core 1.0.4 or newer.'}
+}
 $bridgeDestination=Get-BridgeChild $bridgeGame 'ElevenLabsAgents'
 foreach($private in @('bridge/.env','bridge/caller-profiles.json','bridge/runtime')) {Assert-BridgePath $bridgeDestination (Get-BridgeChild $bridgeDestination $private)}
 if(-not $PSCmdlet.ShouldProcess($bridgeDestination,'Verify and install the public ElevenLabs Agents bridge; preserve local settings, then start the hidden backend and open its local setup page')) {return}
