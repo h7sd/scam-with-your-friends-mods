@@ -1,5 +1,7 @@
 # Stock launcher packages
 
+The compiled files are also committed directly in [ElevenLabs Agents](../mods/ElevenLabs-Agents), [Requested Payout](../mods/Requested-Payout), and [dependency folders](../mods/Dependencies). Their DLLs and stamped setup scripts match the published release ZIPs byte for byte.
+
 Each mod has its own public release repository and exactly one mod ZIP in its latest release:
 
 - [ElevenLabs Agents](https://github.com/h7sd/ElevenLabs-Agents/releases/latest): `ElevenLabs-Agents-1.0.2.zip`

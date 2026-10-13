@@ -1,5 +1,7 @@
 # Community Mods for Scam With Your Friends
 
+**Compiled DLL folders:** [ElevenLabs Agents](mods/ElevenLabs-Agents), [Requested Payout](mods/Requested-Payout), and [shared dependencies](mods/Dependencies). These folders contain the exact DLLs and post-install scripts from the published ZIPs.
+
 This repository provides **ElevenLabs Agents 1.0.1** and **Requested Payout 1.2.0** for credit card and gift card scams. Each mod has its own small ZIP and release repository for the standard ScamWYF launcher. See [stock launcher packages and catalogue entries](catalogue/README.md).
 
 Download [ElevenLabs Agents](https://github.com/h7sd/ElevenLabs-Agents/releases/latest) or [Requested Payout](https://github.com/h7sd/Requested-Payout/releases/latest). Each latest release contains one ZIP with exactly that mod's own DLL and its post-install script at the root. Packaging releases 1.0.2 and 1.2.1 retain the existing mod DLL versions. Required Core, AI Backend and bridge files are downloaded separately by setup; keys and configuration are never packaged. Accept setup on a fresh installation, or install the documented dependencies manually before launching the game.
