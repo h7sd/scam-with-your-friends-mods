@@ -1,10 +1,8 @@
 # Community Mods for Scam With Your Friends
 
-This source repository includes **ElevenLabs Agents 1.0.1**, **Requested Payout 1.2.0** for credit card and gift card scams, and **TikTok Pocket 1.0.1**. Each mod now has its own small ZIP and release repository for the standard ScamWYF launcher. See [stock launcher packages and catalogue entries](catalogue/README.md).
+This repository provides **ElevenLabs Agents 1.0.1** and **Requested Payout 1.2.0** for credit card and gift card scams. Each mod has its own small ZIP and release repository for the standard ScamWYF launcher. See [stock launcher packages and catalogue entries](catalogue/README.md).
 
-Download [ElevenLabs Agents](https://github.com/h7sd/ElevenLabs-Agents/releases/latest), [Requested Payout](https://github.com/h7sd/Requested-Payout/releases/latest), or [TikTok Pocket](https://github.com/h7sd/TikTok-Pocket/releases/latest). Each latest release contains exactly one mod ZIP with bare DLL names and an optional post-install script at its root. Bridge and browser files are downloaded separately by the setup steps; browser profiles, keys and configuration are never packaged.
-
-**TikTok Pocket** adds the official TikTok website to Scamazon as a purchasable app, with a portrait window, an original icon and a separate local browser profile. Version **1.0.1** replaces its original browser renderer with Microsoft Edge WebView2 to support video playback. The address bar is hidden; **Back** and **Refresh** remain available. See [TikTok Pocket's README](tiktok-mod/README.md) for requirements and browser-session details.
+Download [ElevenLabs Agents](https://github.com/h7sd/ElevenLabs-Agents/releases/latest) or [Requested Payout](https://github.com/h7sd/Requested-Payout/releases/latest). Each latest release contains exactly one mod ZIP with bare DLL names and an optional post-install script at its root. Bridge files are downloaded separately by the setup step; keys and configuration are never packaged.
 
 ## ElevenLabs Agents
 
@@ -26,7 +24,7 @@ To have every caller respond in German, select **Caller language → Everyone in
 
 On the first call, the backend selects a suitable voice from the available ElevenLabs voices using the character's recorded language, gender, and age. This assignment is retained for each character. Under **Callers and voices** (**Anrufer und Stimmen**), you can load detected callers, preview voices, and change each caller's language or voice. Previewing does not save changes. **Automatic selection** (**Automatische Auswahl**) resets manual overrides. If a character has no explicit language, the game's English default is used; language is not inferred from nationality or name.
 
-The standard launcher's mod list is maintained by the `swyf-modding` project. [`catalogue/mods.json`](catalogue/mods.json) provides the three entries ready to add to it; publishing these packages does not automatically add the entries to the upstream catalogue. Older combined packages and the customized launcher remain available as historical releases.
+The standard launcher's mod list is maintained by the `swyf-modding` project. [`catalogue/mods.json`](catalogue/mods.json) provides the two entries ready to add to it; publishing these packages does not automatically add the entries to the upstream catalogue. Older combined packages and the customized launcher remain available as historical releases.
 
 ## What the mod does
 
@@ -60,15 +58,12 @@ npm test
 cd ..
 .\mod\build.ps1 -NoCopy
 .\payout-mod\build.ps1
-.\scripts\Create-TikTokIcon.ps1
-.\webview-worker\build.ps1
-.\tiktok-mod\build.ps1
 .\scripts\Stage-Release.ps1
 .\scripts\Package-CatalogueMods.ps1
 .\scripts\Test-CataloguePackages.ps1
 ```
 
-`scripts/Get-BuildDependencies.ps1` downloads the source dependencies listed below at pinned Git revisions into `upstream/`. Git, Node.js 22.13 or later, and the .NET 8 SDK are required; the TikTok worker pins SDK **8.0.425**. An optional portable compiler can be placed under `build/tools/dotnet`. Building the C# mods requires locally installed game assemblies and a configured BepInEx installation; game assemblies are not included. The launcher includes the official setup files and their license notices.
+`scripts/Get-BuildDependencies.ps1` downloads the source dependencies listed below at pinned Git revisions into `upstream/`. Git, Node.js 22.13 or later, and the .NET 8 SDK are required. An optional portable compiler can be placed under `build/tools/dotnet`. Building the C# mods requires locally installed game assemblies and a configured BepInEx installation; game assemblies are not included. The historical launcher includes the official setup files and their license notices.
 
 Verified checks include local Node tests covering independent character and player languages, stable voice assignments, concurrent callers, and identical greetings, as well as C# context tests, PCM buffer tests, and hook signatures for the installed game version. Real agent responses with language and voice overrides, along with a cleanly completed PCM audio stream, were tested using the configured account. The backend continues sending silent audio packets during voice output and after microphone recordings so that Agents completes its output and short utterances. Full conversation and multiplayer tests are still needed.
 

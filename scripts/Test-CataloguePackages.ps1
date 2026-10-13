@@ -17,20 +17,17 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 $catalogueAuditResults=[pscustomobject]@{Passed=0;NegativeCases=0}
 $catalogueAuditExpected=@(
     [pscustomobject]@{Repo='ElevenLabs-Agents';Name='ElevenLabs Agents';Version='1.0.1';Zip='ElevenLabs-Agents-1.0.1.zip';Script='setup-elevenlabs-agents.ps1';Files=@('ScamWYF.ElevenLabsAgents.dll','ScamWYF.AiBackend.dll','ScamWYF.Modding.Core.dll')},
-    [pscustomobject]@{Repo='Requested-Payout';Name='Requested Payout';Version='1.2.0';Zip='Requested-Payout-1.2.0.zip';Script='post-install-requested-payout.ps1';Files=@('ScamWYF.RequestedPayout.dll','ScamWYF.Modding.Core.dll')},
-    [pscustomobject]@{Repo='TikTok-Pocket';Name='TikTok Pocket';Version='1.0.1';Zip='TikTok-Pocket-1.0.1.zip';Script='setup-tiktok-pocket.ps1';Files=@('ScamWYF.TikTokPocket.dll','ScamWYF.Modding.Core.dll')}
+    [pscustomobject]@{Repo='Requested-Payout';Name='Requested Payout';Version='1.2.0';Zip='Requested-Payout-1.2.0.zip';Script='post-install-requested-payout.ps1';Files=@('ScamWYF.RequestedPayout.dll','ScamWYF.Modding.Core.dll')}
 )
 $catalogueAuditPluginIdentity=@{
     'ScamWYF.ElevenLabsAgents.dll'=@('com.community.scamwyf.elevenlabsagents','ElevenLabs Agents','1.0.1')
     'ScamWYF.AiBackend.dll'=@('com.community.scamwyf.aibackend','Scam WYF AI Backend','1.1.0')
     'ScamWYF.RequestedPayout.dll'=@('com.community.scamwyf.requestedpayout','Requested Payout','1.2.0')
-    'ScamWYF.TikTokPocket.dll'=@('com.community.scamwyf.tiktokpocket','TikTok Pocket','1.0.1')
 }
 $catalogueAuditCompiledSources=@{
     'ScamWYF.ElevenLabsAgents.dll'='mod/bin/ScamWYF.ElevenLabsAgents.dll'
     'ScamWYF.AiBackend.dll'='upstream/AI-Backend/bin/ScamWYF.AiBackend.dll'
     'ScamWYF.RequestedPayout.dll'='payout-mod/bin/ScamWYF.RequestedPayout.dll'
-    'ScamWYF.TikTokPocket.dll'='tiktok-mod/bin/ScamWYF.TikTokPocket.dll'
     'ScamWYF.Modding.Core.dll'='dist/BepInEx/core/ScamWYF.Modding.Core.dll'
 }
 function Assert-CatalogueCondition {
@@ -48,8 +45,8 @@ function Assert-CatalogueDocument {
     param($Document)
     Assert-CataloguePropertySet $Document @('schemaVersion','mods') 'Catalogue'
     if(($Document.schemaVersion -isnot [int] -and $Document.schemaVersion -isnot [long]) -or $Document.schemaVersion -ne 1){throw 'Catalogue schemaVersion must be integer 1.'}
-    if($Document.mods -isnot [array] -or $Document.mods.Count -ne 3){throw 'Catalogue must contain exactly the three prepared mods.'}
-    for($index=0;$index -lt 3;$index++){
+    if($Document.mods -isnot [array] -or $Document.mods.Count -ne $catalogueAuditExpected.Count){throw 'Catalogue must contain exactly the two active prepared mods.'}
+    for($index=0;$index -lt $catalogueAuditExpected.Count;$index++){
         $entry=$Document.mods[$index];$expected=$catalogueAuditExpected[$index]
         Assert-CataloguePropertySet $entry @('owner','repo','displayName','summary','files','postInstall') $expected.Repo
         if($entry.owner -cne 'h7sd' -or $entry.repo -cne $expected.Repo -or $entry.displayName -cne $expected.Name){throw 'Unexpected catalogue identity or sort order.'}
@@ -212,9 +209,11 @@ foreach($mutate in @(
     {param($d)$d.mods[0].files[0].folder='core'},
     {param($d)($d.mods[0].files|Where-Object {$_.fileName -ceq 'ScamWYF.Modding.Core.dll'}).expectsPluginAttribute=$true},
     {param($d)$d.mods[1].postInstall[0].script='nested/setup.ps1'},
-    {param($d)$d.mods[2].summary=('x'*501)},
+    {param($d)$d.mods[1].summary=('x'*501)},
     {param($d)$d|Add-Member -NotePropertyName unexpected -NotePropertyValue $true},
-    {param($d)$d.mods[2].repo=$d.mods[0].repo}
+    {param($d)$d.mods[1].repo=$d.mods[0].repo},
+    {param($d)$d.mods[1].repo='TikTok-Pocket'},
+    {param($d)$inactive=Copy-CatalogueJson $d.mods[1];$inactive.repo='TikTok-Pocket';$inactive.displayName='TikTok Pocket';$d.mods=@($d.mods)+@($inactive)}
 )){
     $catalogueAuditBadJson=Copy-CatalogueJson $catalogueAuditDocument
     & $mutate $catalogueAuditBadJson
@@ -227,6 +226,16 @@ Assert-CatalogueRejected {Assert-CataloguePackage @($catalogueAuditValidPayout|W
 Assert-CatalogueRejected {Assert-CataloguePackage @($catalogueAuditValidPayout|Where-Object {$_.Name -cne $catalogueAuditPayout.Script}) $catalogueAuditPayout $catalogueAuditPayoutDeclaration} 'Missing declared setup script'
 foreach($extraName in @('bridge/.env','Profile/Cookies','README.md','nested/ScamWYF.RequestedPayout.dll','extra.dll')){
     Assert-CatalogueRejected {Assert-CataloguePackage (@($catalogueAuditValidPayout)+@([pscustomobject]@{Name=$extraName;Bytes=[byte[]]@(1)})) $catalogueAuditPayout $catalogueAuditPayoutDeclaration} 'Unexpected/private/nested entry'
+}
+# Archived TikTok ZIPs may remain beside the active packages. They must not enter
+# either active mod's declared contents or reappear in the active catalogue.
+for($catalogueAuditInactiveIndex=0;$catalogueAuditInactiveIndex -lt $catalogueAuditExpected.Count;$catalogueAuditInactiveIndex++){
+    $catalogueAuditActiveSpec=$catalogueAuditExpected[$catalogueAuditInactiveIndex]
+    $catalogueAuditActiveEntries=$catalogueAuditPackages[$catalogueAuditActiveSpec.Repo]
+    $catalogueAuditActiveDeclaration=$catalogueAuditDocument.mods[$catalogueAuditInactiveIndex]
+    foreach($catalogueAuditInactiveName in @('ScamWYF.TikTokPocket.dll','TikTok-Pocket-1.0.1.zip')){
+        Assert-CatalogueRejected {Assert-CataloguePackage (@($catalogueAuditActiveEntries)+@([pscustomobject]@{Name=$catalogueAuditInactiveName;Bytes=[byte[]]@(1)})) $catalogueAuditActiveSpec $catalogueAuditActiveDeclaration} ('Inactive TikTok content inside '+$catalogueAuditActiveSpec.Repo)
+    }
 }
 foreach($badKind in @('duplicate','unreadable','attribute','version','oversize-script','bad-parameter')){
     $catalogueAuditBadEntries=@(foreach($entry in $catalogueAuditValidPayout){[pscustomobject]@{Name=$entry.Name;Bytes=$entry.Bytes}})

@@ -1,7 +1,7 @@
 [CmdletBinding()]
-param([string]$ProjectDirectory=(Split-Path -Parent $PSScriptRoot))
+param([string]$ProjectDirectory=(Split-Path -Parent $PSScriptRoot),[switch]$IncludeTikTok)
 $ErrorActionPreference='Stop'
-. (Join-Path $PSScriptRoot 'TikTok-WorkerPackage.ps1')
+if($IncludeTikTok){. (Join-Path $PSScriptRoot 'TikTok-WorkerPackage.ps1')}
 $catalogueRuntimeRoot=[IO.Path]::GetFullPath($ProjectDirectory)
 $catalogueOutput=Join-Path $catalogueRuntimeRoot 'build/catalogue-packages'
 [IO.Directory]::CreateDirectory($catalogueOutput)|Out-Null
@@ -12,8 +12,12 @@ function Write-CatalogueRuntimeZip([string]$ArchivePath,[Collections.IDictionary
     $archive=[IO.Compression.ZipArchive]::new($stream,[IO.Compression.ZipArchiveMode]::Create)
     try {
         foreach($entry in $Entries.GetEnumerator()){
-            Assert-TikTokWorkerPath -Root $catalogueRuntimeRoot -Path $entry.Value
             if(-not (Test-Path -LiteralPath $entry.Value -PathType Leaf)){throw ('Runtime source missing: '+$entry.Key)}
+            $source=[IO.Path]::GetFullPath($entry.Value)
+            $boundary=$catalogueRuntimeRoot.TrimEnd('\','/')+[IO.Path]::DirectorySeparatorChar
+            if(-not $source.StartsWith($boundary,[StringComparison]::OrdinalIgnoreCase)){throw 'A runtime source escapes the project folder.'}
+            $ancestor=$source
+            while($ancestor){if(([IO.File]::GetAttributes($ancestor) -band [IO.FileAttributes]::ReparsePoint) -ne 0){throw 'Runtime packaging does not follow links or junctions.'};$ancestor=[IO.Path]::GetDirectoryName($ancestor)}
             [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive,$entry.Value,$entry.Key,[IO.Compression.CompressionLevel]::Optimal)|Out-Null
         }
     } finally {$archive.Dispose();$stream.Dispose()}
@@ -21,6 +25,7 @@ function Write-CatalogueRuntimeZip([string]$ArchivePath,[Collections.IDictionary
     try {if($read.Entries.Count -ne $Entries.Count -or @($read.Entries | Where-Object {$Entries.Keys -cnotcontains $_.FullName}).Count){throw 'Runtime ZIP inventory mismatch.'}}
     finally {$read.Dispose()}
 }
+if($IncludeTikTok){
 $worker=Get-TikTokWorkerPackage -WorkerRoot (Join-Path $catalogueRuntimeRoot 'webview-worker/publish')
 $tikTokEntries=[ordered]@{
     'TikTokPocket/tiktok-pocket.png'=(Join-Path $catalogueRuntimeRoot 'tiktok-mod/assets/tiktok-pocket.png')
@@ -30,6 +35,7 @@ $tikTokEntries=[ordered]@{
 foreach($file in $worker.Files){$tikTokEntries['TikTokPocket/BrowserWorker/'+$file.Path]=$file.FullPath}
 $tikTokArchive=Join-Path $catalogueOutput 'TikTok-Pocket-Runtime-1.0.1-win-x64.zip'
 Write-CatalogueRuntimeZip $tikTokArchive $tikTokEntries
+}
 
 $bridgeEntries=[ordered]@{
     'Start-ElevenLabs.cmd'=(Join-Path $catalogueRuntimeRoot 'Start-ElevenLabs.cmd')
@@ -59,12 +65,15 @@ $bridgeEntries['bridge-files.json']=$bridgeManifestPath
 $bridgeArchive=Join-Path $catalogueOutput 'ElevenLabs-Agents-Bridge-1.0.1.zip'
 Write-CatalogueRuntimeZip $bridgeArchive $bridgeEntries
 $runtimeDigests=[ordered]@{
-    tikTokArchiveSha256=(Get-FileHash -LiteralPath $tikTokArchive).Hash.ToLowerInvariant()
-    tikTokManifestSha256=(Get-FileHash -LiteralPath $worker.ManifestPath).Hash.ToLowerInvariant()
-    tikTokIconSha256=(Get-FileHash -LiteralPath $tikTokEntries['TikTokPocket/tiktok-pocket.png']).Hash.ToLowerInvariant()
     bridgeArchiveSha256=(Get-FileHash -LiteralPath $bridgeArchive).Hash.ToLowerInvariant()
     bridgeManifestSha256=(Get-FileHash -LiteralPath $bridgeManifestPath).Hash.ToLowerInvariant()
 }
+if($IncludeTikTok){
+    $runtimeDigests['tikTokArchiveSha256']=(Get-FileHash -LiteralPath $tikTokArchive).Hash.ToLowerInvariant()
+    $runtimeDigests['tikTokManifestSha256']=(Get-FileHash -LiteralPath $worker.ManifestPath).Hash.ToLowerInvariant()
+    $runtimeDigests['tikTokIconSha256']=(Get-FileHash -LiteralPath $tikTokEntries['TikTokPocket/tiktok-pocket.png']).Hash.ToLowerInvariant()
+}
 [IO.File]::WriteAllText((Join-Path $catalogueOutput 'runtime-digests.json'),($runtimeDigests|ConvertTo-Json),[Text.UTF8Encoding]::new($false))
-Write-Output ('TikTok runtime: '+$tikTokEntries.Count+' entries; bridge runtime: '+$bridgeEntries.Count+' entries. Private settings excluded.')
-Get-Item -LiteralPath $tikTokArchive,$bridgeArchive | Select-Object Name,Length
+Write-Output ('Bridge runtime: '+$bridgeEntries.Count+' entries. Private settings excluded.')
+if($IncludeTikTok){Write-Output ('Optional legacy TikTok runtime: '+$tikTokEntries.Count+' entries.');Get-Item -LiteralPath $tikTokArchive|Select-Object Name,Length}
+Get-Item -LiteralPath $bridgeArchive | Select-Object Name,Length

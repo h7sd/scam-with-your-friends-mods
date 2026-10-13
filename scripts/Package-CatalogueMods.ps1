@@ -10,7 +10,7 @@ $catalogueProject=[IO.Path]::GetFullPath($ProjectDirectory)
 $cataloguePackageRoot=Join-Path $catalogueProject 'build/catalogue-packages'
 [IO.Directory]::CreateDirectory($cataloguePackageRoot)|Out-Null
 if($Mod -ne 'RequestedPayout'){
-    if(-not $UseExistingRuntime){& (Join-Path $PSScriptRoot 'Package-CatalogueRuntime.ps1') -ProjectDirectory $catalogueProject}
+    if(-not $UseExistingRuntime){& (Join-Path $PSScriptRoot 'Package-CatalogueRuntime.ps1') -ProjectDirectory $catalogueProject -IncludeTikTok:($Mod -eq 'TikTok')}
     $digests=Get-Content -LiteralPath (Join-Path $cataloguePackageRoot 'runtime-digests.json') -Raw|ConvertFrom-Json
 }
 $commonCore='dist/BepInEx/core/ScamWYF.Modding.Core.dll'
@@ -26,6 +26,7 @@ Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $catalogueBuilt=[Collections.Generic.List[object]]::new()
 foreach($definition in $definitions){
+    if($Mod -eq 'All' -and $definition.Key -eq 'TikTok'){continue}
     if($Mod -ne 'All' -and $definition.Key -ne $Mod){continue}
     $scriptPath=Join-Path $catalogueProject ('scripts/post-install/'+$definition.Script)
     $scriptBody=[IO.File]::ReadAllText($scriptPath)

@@ -33,22 +33,6 @@
           "description": "Checks the installed mod and displays its payout rules and multiplayer host instructions. Skipping does not affect the mod; no additional setup or downloads are required."
         }
       ]
-    },
-    {
-      "owner": "h7sd",
-      "repo": "TikTok-Pocket",
-      "displayName": "TikTok Pocket",
-      "summary": "Adds a purchasable portrait TikTok app to Scamazon, with its own icon, hidden address bar and a separate local WebView2 browser session. Requires Microsoft Edge WebView2 Runtime.",
-      "files": [
-        { "fileName": "ScamWYF.TikTokPocket.dll", "folder": "plugins", "expectsPluginAttribute": true },
-        { "fileName": "ScamWYF.Modding.Core.dll", "folder": "core", "expectsPluginAttribute": false }
-      ],
-      "postInstall": [
-        {
-          "script": "setup-tiktok-pocket.ps1",
-          "description": "Downloads and installs TikTok Pocket's icon and local video browser. Requires Microsoft Edge WebView2 Runtime. Skipping leaves the DLL installed, but the TikTok app cannot open until these files are installed."
-        }
-      ]
     }
   ]
 }
